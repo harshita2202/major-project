@@ -41,10 +41,16 @@ public class ExamSession {
     private int violationCount = 0;
 
     @Column(name = "risk_level")
-    private String riskLevel = "low"; // "low", "medium", "high"
+    private String riskLevel = "LOW"; // "LOW", "MEDIUM", "HIGH"
 
     @Column(name = "risk_score")
-    private int riskScore = 0; // 0 - 100
+    private int riskScore = 0; // Cumulative score
+
+    @Column(name = "medium_warning_triggered")
+    private Boolean mediumWarningTriggered = false;
+
+    @Column(name = "submission_reason")
+    private String submissionReason;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
@@ -65,22 +71,32 @@ public class ExamSession {
         this.lastActiveTime = LocalDateTime.now();
         this.currentQuestionIndex = 0;
         this.violationCount = 0;
-        this.riskLevel = "low";
+        this.riskLevel = "LOW";
         this.riskScore = 0;
+        this.mediumWarningTriggered = false;
         this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public void addRiskPoints(int points, String calculatedLevel) {
+        this.violationCount++;
+        this.riskScore += points;
+        this.riskLevel = calculatedLevel;
+        this.updatedAt = LocalDateTime.now();
+        this.lastActiveTime = LocalDateTime.now();
+    }
+
+    public void autoSubmit(String reason) {
+        this.status = "AUTO_SUBMITTED";
+        this.submissionReason = reason;
+        this.endTime = LocalDateTime.now();
+        this.lastActiveTime = LocalDateTime.now();
+        this.timeRemainingSeconds = 0;
         this.updatedAt = LocalDateTime.now();
     }
 
     public void incrementViolationCount() {
         this.violationCount++;
-        this.riskScore = Math.min(100, this.violationCount * 25);
-        if (this.violationCount >= 3) {
-            this.riskLevel = "high";
-        } else if (this.violationCount >= 1) {
-            this.riskLevel = "medium";
-        } else {
-            this.riskLevel = "low";
-        }
         this.updatedAt = LocalDateTime.now();
     }
 
@@ -127,6 +143,15 @@ public class ExamSession {
 
     public int getRiskScore() { return riskScore; }
     public void setRiskScore(int riskScore) { this.riskScore = riskScore; }
+
+    public int getTotalRiskScore() { return riskScore; }
+    public void setTotalRiskScore(int totalRiskScore) { this.riskScore = totalRiskScore; }
+
+    public boolean isMediumWarningTriggered() { return Boolean.TRUE.equals(mediumWarningTriggered); }
+    public void setMediumWarningTriggered(Boolean mediumWarningTriggered) { this.mediumWarningTriggered = mediumWarningTriggered; }
+
+    public String getSubmissionReason() { return submissionReason; }
+    public void setSubmissionReason(String submissionReason) { this.submissionReason = submissionReason; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

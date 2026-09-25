@@ -1,5 +1,6 @@
 package com.proctoring.proctoring_backend.controller;
 
+import com.proctoring.proctoring_backend.dto.ExaminerLiveRiskResponse;
 import com.proctoring.proctoring_backend.dto.SessionResponse;
 import com.proctoring.proctoring_backend.dto.StartSessionRequest;
 import com.proctoring.proctoring_backend.service.ExamSessionService;
@@ -52,6 +53,14 @@ public class ExamSessionController {
         return examSessionService.getActiveSession(candidateId, examId)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * Retrieve live risk dashboard grouping candidates by risk level.
+     */
+    @GetMapping("/live-risk")
+    public ExaminerLiveRiskResponse getLiveRiskDashboard(@RequestParam(required = false) String examId) {
+        return examSessionService.getLiveRiskDashboard(examId);
     }
 
     /**

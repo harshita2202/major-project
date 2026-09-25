@@ -34,6 +34,18 @@ public class ProctoringEvent {
     @Column(columnDefinition = "TEXT")
     private String metadata; // JSON or additional context (e.g. key combo, window info)
 
+    @Column(name = "points_added")
+    private Integer pointsAdded = 0;
+
+    @Column(name = "updated_risk_score")
+    private Integer updatedRiskScore = 0;
+
+    @Column(name = "updated_risk_level")
+    private String updatedRiskLevel;
+
+    @Column(name = "warning_message", length = 1000)
+    private String warningMessage;
+
     @Column(nullable = false)
     private LocalDateTime timestamp = LocalDateTime.now();
 
@@ -41,7 +53,8 @@ public class ProctoringEvent {
 
     public ProctoringEvent(String id, String sessionId, String examId, String candidateId,
                            String eventType, String severity, String details, String metadata,
-                           LocalDateTime timestamp) {
+                           int pointsAdded, int updatedRiskScore, String updatedRiskLevel,
+                           String warningMessage, LocalDateTime timestamp) {
         this.id = id;
         this.sessionId = sessionId;
         this.examId = examId;
@@ -50,6 +63,10 @@ public class ProctoringEvent {
         this.severity = severity != null ? severity : "medium";
         this.details = details;
         this.metadata = metadata;
+        this.pointsAdded = pointsAdded;
+        this.updatedRiskScore = updatedRiskScore;
+        this.updatedRiskLevel = updatedRiskLevel;
+        this.warningMessage = warningMessage;
         this.timestamp = timestamp != null ? timestamp : LocalDateTime.now();
     }
 
@@ -76,6 +93,18 @@ public class ProctoringEvent {
 
     public String getMetadata() { return metadata; }
     public void setMetadata(String metadata) { this.metadata = metadata; }
+
+    public int getPointsAdded() { return pointsAdded != null ? pointsAdded : 0; }
+    public void setPointsAdded(Integer pointsAdded) { this.pointsAdded = pointsAdded != null ? pointsAdded : 0; }
+
+    public int getUpdatedRiskScore() { return updatedRiskScore != null ? updatedRiskScore : 0; }
+    public void setUpdatedRiskScore(Integer updatedRiskScore) { this.updatedRiskScore = updatedRiskScore != null ? updatedRiskScore : 0; }
+
+    public String getUpdatedRiskLevel() { return updatedRiskLevel; }
+    public void setUpdatedRiskLevel(String updatedRiskLevel) { this.updatedRiskLevel = updatedRiskLevel; }
+
+    public String getWarningMessage() { return warningMessage; }
+    public void setWarningMessage(String warningMessage) { this.warningMessage = warningMessage; }
 
     public LocalDateTime getTimestamp() { return timestamp; }
     public void setTimestamp(LocalDateTime timestamp) { this.timestamp = timestamp; }

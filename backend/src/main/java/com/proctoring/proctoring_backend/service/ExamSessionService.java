@@ -1,5 +1,7 @@
 package com.proctoring.proctoring_backend.service;
 
+import com.proctoring.proctoring_backend.dto.CandidateRiskSummary;
+import com.proctoring.proctoring_backend.dto.ExaminerLiveRiskResponse;
 import com.proctoring.proctoring_backend.dto.SessionResponse;
 import com.proctoring.proctoring_backend.dto.StartSessionRequest;
 import com.proctoring.proctoring_backend.entity.Candidate;
@@ -12,6 +14,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -123,6 +127,67 @@ public class ExamSessionService {
             examSessionRepository.save(session);
             return SessionResponse.fromEntity(session);
         });
+    }
+
+    public ExaminerLiveRiskResponse getLiveRiskDashboard(String examId) {
+        List<String> activeStatuses = List.of("ACTIVE", "AUTO_SUBMITTED", "in-progress", "active");
+        List<ExamSession> sessions;
+        if (examId != null && !examId.trim().isEmpty()) {
+            sessions = examSessionRepository.findByExamIdAndStatusIn(examId, activeStatuses);
+        } else {
+            sessions = examSessionRepository.findByStatusIn(activeStatuses);
+        }
+
+        List<CandidateRiskSummary> highRisk = new ArrayList<>();
+        List<CandidateRiskSummary> mediumRisk = new ArrayList<>();
+        List<CandidateRiskSummary> lowRisk = new ArrayList<>();
+        int activeCount = 0;
+        int autoSubmittedCount = 0;
+
+        for (ExamSession session : sessions) {
+            String avatar = candidateRepository.findById(session.getCandidateId())
+                    .map(Candidate::getAvatar)
+                    .orElse("https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop&crop=faces");
+
+            CandidateRiskSummary summary = new CandidateRiskSummary(
+                    session.getId(),
+                    session.getCandidateId(),
+                    session.getCandidateName(),
+                    avatar,
+                    session.getExamId(),
+                    session.getRiskScore(),
+                    session.getRiskLevel(),
+                    session.getStatus(),
+                    session.getSubmissionReason(),
+                    session.getViolationCount(),
+                    session.getLastActiveTime()
+            );
+
+            if ("AUTO_SUBMITTED".equalsIgnoreCase(session.getStatus())) {
+                autoSubmittedCount++;
+            } else if ("ACTIVE".equalsIgnoreCase(session.getStatus())) {
+                activeCount++;
+            }
+
+            int score = session.getRiskScore();
+            if (score >= 80) {
+                highRisk.add(summary);
+            } else if (score >= 50) {
+                mediumRisk.add(summary);
+            } else {
+                lowRisk.add(summary);
+            }
+        }
+
+        // Sort descending by highest risk score first within each section
+        highRisk.sort(Comparator.comparingInt(CandidateRiskSummary::getRiskScore).reversed());
+        mediumRisk.sort(Comparator.comparingInt(CandidateRiskSummary::getRiskScore).reversed());
+        lowRisk.sort(Comparator.comparingInt(CandidateRiskSummary::getRiskScore).reversed());
+
+        ExaminerLiveRiskResponse response = new ExaminerLiveRiskResponse(highRisk, mediumRisk, lowRisk);
+        response.setActiveCount(activeCount);
+        response.setAutoSubmittedCount(autoSubmittedCount);
+        return response;
     }
 
     private int calculateExamDurationSeconds(String examId) {

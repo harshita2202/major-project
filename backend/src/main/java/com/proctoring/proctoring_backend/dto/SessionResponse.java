@@ -10,6 +10,8 @@ public class SessionResponse {
     private String candidateId;
     private String candidateName;
     private String status;
+    private String submissionReason;
+    private boolean mediumWarningTriggered;
     private LocalDateTime startTime;
     private LocalDateTime endTime;
     private LocalDateTime lastActiveTime;
@@ -18,6 +20,7 @@ public class SessionResponse {
     private int violationCount;
     private String riskLevel;
     private int riskScore;
+    private int totalRiskScore;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -31,6 +34,8 @@ public class SessionResponse {
         resp.setCandidateId(session.getCandidateId());
         resp.setCandidateName(session.getCandidateName());
         resp.setStatus(session.getStatus());
+        resp.setSubmissionReason(session.getSubmissionReason());
+        resp.setMediumWarningTriggered(session.isMediumWarningTriggered());
         resp.setStartTime(session.getStartTime());
         resp.setEndTime(session.getEndTime());
         resp.setLastActiveTime(session.getLastActiveTime());
@@ -39,6 +44,7 @@ public class SessionResponse {
         resp.setViolationCount(session.getViolationCount());
         resp.setRiskLevel(session.getRiskLevel());
         resp.setRiskScore(session.getRiskScore());
+        resp.setTotalRiskScore(session.getRiskScore());
         resp.setCreatedAt(session.getCreatedAt());
         resp.setUpdatedAt(session.getUpdatedAt());
         return resp;
@@ -58,6 +64,12 @@ public class SessionResponse {
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public String getSubmissionReason() { return submissionReason; }
+    public void setSubmissionReason(String submissionReason) { this.submissionReason = submissionReason; }
+
+    public boolean isMediumWarningTriggered() { return mediumWarningTriggered; }
+    public void setMediumWarningTriggered(boolean mediumWarningTriggered) { this.mediumWarningTriggered = mediumWarningTriggered; }
 
     public LocalDateTime getStartTime() { return startTime; }
     public void setStartTime(LocalDateTime startTime) { this.startTime = startTime; }
@@ -82,6 +94,9 @@ public class SessionResponse {
 
     public int getRiskScore() { return riskScore; }
     public void setRiskScore(int riskScore) { this.riskScore = riskScore; }
+
+    public int getTotalRiskScore() { return totalRiskScore; }
+    public void setTotalRiskScore(int totalRiskScore) { this.totalRiskScore = totalRiskScore; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

@@ -13,4 +13,6 @@ public interface ExamSessionRepository extends JpaRepository<ExamSession, String
     List<ExamSession> findByExamId(String examId);
     Optional<ExamSession> findByCandidateIdAndExamIdAndStatus(String candidateId, String examId, String status);
     Optional<ExamSession> findTopByCandidateIdAndExamIdOrderByCreatedAtDesc(String candidateId, String examId);
+    List<ExamSession> findByStatusIn(List<String> statuses);
+    List<ExamSession> findByExamIdAndStatusIn(String examId, List<String> statuses);
 }
