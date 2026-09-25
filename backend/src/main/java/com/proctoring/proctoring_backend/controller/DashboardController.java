@@ -1,8 +1,8 @@
 package com.proctoring.proctoring_backend.controller;
 
-import com.proctoring.proctoring_backend.model.Candidate;
-import com.proctoring.proctoring_backend.model.Exam;
-import com.proctoring.proctoring_backend.model.Violation;
+import com.proctoring.proctoring_backend.entity.Candidate;
+import com.proctoring.proctoring_backend.entity.Exam;
+import com.proctoring.proctoring_backend.entity.Violation;
 import com.proctoring.proctoring_backend.repository.CandidateRepository;
 import com.proctoring.proctoring_backend.repository.ExamRepository;
 import com.proctoring.proctoring_backend.repository.ViolationRepository;

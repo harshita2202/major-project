@@ -1,4 +1,4 @@
-package com.proctoring.proctoring_backend.model;
+package com.proctoring.proctoring_backend.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

@@ -1,6 +1,6 @@
 package com.proctoring.proctoring_backend.config;
 
-import com.proctoring.proctoring_backend.model.*;
+import com.proctoring.proctoring_backend.entity.*;
 import com.proctoring.proctoring_backend.repository.*;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
@@ -15,17 +15,23 @@ public class DatabaseSeeder implements CommandLineRunner {
     private final CandidateRepository candidateRepository;
     private final StudentRepository studentRepository;
     private final ViolationRepository violationRepository;
+    private final UserRepository userRepository;
+    private final ExamSessionRepository examSessionRepository;
 
     public DatabaseSeeder(ExamRepository examRepository,
                           QuestionRepository questionRepository,
                           CandidateRepository candidateRepository,
                           StudentRepository studentRepository,
-                          ViolationRepository violationRepository) {
+                          ViolationRepository violationRepository,
+                          UserRepository userRepository,
+                          ExamSessionRepository examSessionRepository) {
         this.examRepository = examRepository;
         this.questionRepository = questionRepository;
         this.candidateRepository = candidateRepository;
         this.studentRepository = studentRepository;
         this.violationRepository = violationRepository;
+        this.userRepository = userRepository;
+        this.examSessionRepository = examSessionRepository;
     }
 
     @Override
@@ -266,6 +272,24 @@ public class DatabaseSeeder implements CommandLineRunner {
                 "Audio analysis detected whisper audio above 68dB");
 
         violationRepository.saveAll(List.of(v1, v2, v3));
+
+        // 7. Seed Users
+        User u1 = new User("STU001", "alex.morgan", "alex.morgan@university.edu", "Alex Morgan", "CANDIDATE", "ACTIVE");
+        User u2 = new User("STU002", "david.chen", "david.chen@university.edu", "David Chen", "CANDIDATE", "ACTIVE");
+        User u3 = new User("INV001", "robert.vance", "robert.vance@university.edu", "Dr. Robert Vance", "INVIGILATOR", "ACTIVE");
+        User u4 = new User("ADM001", "admin", "admin@university.edu", "System Administrator", "ADMIN", "ACTIVE");
+
+        userRepository.saveAll(List.of(u1, u2, u3, u4));
+
+        // 8. Seed Sample Active Exam Session
+        ExamSession session1 = new ExamSession(
+                "session-demo-1",
+                "exam-1",
+                "STU001",
+                "Alex Morgan",
+                5040
+        );
+        examSessionRepository.save(session1);
 
         System.out.println("Database seeding completed successfully.");
     }

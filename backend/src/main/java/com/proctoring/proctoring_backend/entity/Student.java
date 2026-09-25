@@ -1,4 +1,4 @@
-package com.proctoring.proctoring_backend.model;
+package com.proctoring.proctoring_backend.entity;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;

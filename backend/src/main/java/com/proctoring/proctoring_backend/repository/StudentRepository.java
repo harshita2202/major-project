@@ -1,6 +1,6 @@
 package com.proctoring.proctoring_backend.repository;
 
-import com.proctoring.proctoring_backend.model.Student;
+import com.proctoring.proctoring_backend.entity.Student;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

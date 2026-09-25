@@ -1,10 +1,10 @@
 package com.proctoring.proctoring_backend.controller;
 
-import com.proctoring.proctoring_backend.model.Exam;
-import com.proctoring.proctoring_backend.model.ExamSubmission;
-import com.proctoring.proctoring_backend.model.Question;
-import com.proctoring.proctoring_backend.model.SecurityEventEntity;
-import com.proctoring.proctoring_backend.model.Violation;
+import com.proctoring.proctoring_backend.entity.Exam;
+import com.proctoring.proctoring_backend.entity.ExamSubmission;
+import com.proctoring.proctoring_backend.entity.Question;
+import com.proctoring.proctoring_backend.entity.SecurityEventEntity;
+import com.proctoring.proctoring_backend.entity.Violation;
 import com.proctoring.proctoring_backend.repository.ExamRepository;
 import com.proctoring.proctoring_backend.repository.ExamSubmissionRepository;
 import com.proctoring.proctoring_backend.repository.QuestionRepository;
@@ -26,17 +26,20 @@ public class ExamController {
     private final ExamSubmissionRepository submissionRepository;
     private final SecurityEventRepository securityEventRepository;
     private final ViolationRepository violationRepository;
+    private final com.proctoring.proctoring_backend.service.ProctoringEventService proctoringEventService;
 
     public ExamController(ExamRepository examRepository,
                           QuestionRepository questionRepository,
                           ExamSubmissionRepository submissionRepository,
                           SecurityEventRepository securityEventRepository,
-                          ViolationRepository violationRepository) {
+                          ViolationRepository violationRepository,
+                          com.proctoring.proctoring_backend.service.ProctoringEventService proctoringEventService) {
         this.examRepository = examRepository;
         this.questionRepository = questionRepository;
         this.submissionRepository = submissionRepository;
         this.securityEventRepository = securityEventRepository;
         this.violationRepository = violationRepository;
+        this.proctoringEventService = proctoringEventService;
     }
 
     @GetMapping
@@ -121,37 +124,30 @@ public class ExamController {
 
     @PostMapping("/{id}/events")
     public ResponseEntity<?> recordSecurityEvent(@PathVariable String id, @RequestBody Map<String, Object> payload) {
-        String eventId = "evt-" + UUID.randomUUID().toString().substring(0, 8);
         String studentId = (String) payload.getOrDefault("studentId", "STU001");
+        String studentName = (String) payload.getOrDefault("studentName", "Alex Morgan");
         String type = (String) payload.getOrDefault("type", "SECURITY_WARNING");
         String severity = (String) payload.getOrDefault("severity", "medium");
         String message = (String) payload.getOrDefault("message", "Security event recorded");
+        String sessionId = (String) payload.get("sessionId");
 
-        SecurityEventEntity event = new SecurityEventEntity(eventId, id, studentId, type, severity, message);
-        securityEventRepository.save(event);
+        com.proctoring.proctoring_backend.dto.ProctoringEventRequest eventReq =
+                new com.proctoring.proctoring_backend.dto.ProctoringEventRequest();
+        eventReq.setExamId(id);
+        eventReq.setSessionId(sessionId);
+        eventReq.setCandidateId(studentId);
+        eventReq.setCandidateName(studentName);
+        eventReq.setEventType(type);
+        eventReq.setSeverity(severity);
+        eventReq.setDetails(message);
 
-        // Also record as a Violation for invigilator visibility
-        String violId = "VIO-" + System.currentTimeMillis() % 100000;
-        String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-        String examTitle = examRepository.findById(id).map(Exam::getName).orElse(id);
-
-        Violation violation = new Violation(
-                violId,
-                studentId,
-                (String) payload.getOrDefault("studentName", "Alex Morgan"),
-                "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop&crop=faces",
-                examTitle,
-                type,
-                severity,
-                now,
-                "pending",
-                message
-        );
-        violationRepository.save(violation);
+        com.proctoring.proctoring_backend.dto.ProctoringEventResponse savedEvent =
+                proctoringEventService.recordEvent(eventReq);
 
         Map<String, Object> response = new HashMap<>();
         response.put("success", true);
-        response.put("eventId", eventId);
+        response.put("eventId", savedEvent.getId());
+        response.put("sessionId", savedEvent.getSessionId());
         return ResponseEntity.ok(response);
     }
 }

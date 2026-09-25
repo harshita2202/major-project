@@ -1,6 +1,6 @@
 package com.proctoring.proctoring_backend.controller;
 
-import com.proctoring.proctoring_backend.model.Candidate;
+import com.proctoring.proctoring_backend.entity.Candidate;
 import com.proctoring.proctoring_backend.repository.CandidateRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

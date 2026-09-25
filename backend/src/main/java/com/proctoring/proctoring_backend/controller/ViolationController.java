@@ -1,6 +1,6 @@
 package com.proctoring.proctoring_backend.controller;
 
-import com.proctoring.proctoring_backend.model.Violation;
+import com.proctoring.proctoring_backend.entity.Violation;
 import com.proctoring.proctoring_backend.repository.ViolationRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
