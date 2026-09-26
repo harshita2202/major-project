@@ -11,6 +11,9 @@ import {
   Maximize,
   RotateCcw,
   ArrowLeft,
+  AlertOctagon,
+  Award,
+  AlertTriangle,
 } from 'lucide-react';
 
 import ExamTimer from '../components/exam/ExamTimer';
@@ -44,7 +47,14 @@ import {
 } from '../services/examSecurity';
 
 import { getCurrentUser } from '../services/auth';
-import { getExamQuestions, submitExam, recordExamEvent } from '../services/api';
+import {
+  getExamQuestions,
+  submitExam,
+  recordExamEvent,
+  startExamAttempt,
+  updateExamProgress,
+  endExamAttempt,
+} from '../services/api';
 
 // ─── Exam phase constants ──────────────────────────────────────────────────────
 const PHASE = {
@@ -55,6 +65,39 @@ const PHASE = {
 };
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
+export function calculateExamScore(questionList = [], currentAnswers = {}) {
+  if (!questionList || questionList.length === 0) {
+    return { score: 0, correctCount: 0, totalQuestions: 0, percentage: 0 };
+  }
+  let correct = 0;
+  questionList.forEach((q) => {
+    const studentAns = currentAnswers[q.id];
+    if (studentAns !== undefined && studentAns !== null && studentAns !== '') {
+      if (q.type === 'coding') {
+        if (typeof studentAns === 'string' && studentAns.trim().length > 15) {
+          correct += 1;
+        }
+      } else {
+        if (q.correctIndex !== undefined && q.correctIndex !== null) {
+          if (Number(studentAns) === Number(q.correctIndex)) {
+            correct += 1;
+          }
+        } else {
+          correct += 1;
+        }
+      }
+    }
+  });
+  const total = questionList.length;
+  const percentage = total > 0 ? Math.round((correct / total) * 100) : 0;
+  return {
+    score: percentage,
+    correctCount: correct,
+    totalQuestions: total,
+    percentage,
+  };
+}
+
 function formatSubmissionTime(iso) {
   try {
     return new Date(iso).toLocaleString('en-US', {
@@ -103,6 +146,8 @@ export default function StudentExam() {
   }, [examId]);
 
   const INITIAL_SECONDS = examMeta.durationMinutes * 60;
+  const MAX_TAB_SWITCHES = examMeta.maxTabSwitchWarnings || 3;
+  const MAX_FULLSCREEN_EXITS = 3;
 
   // ── State ──────────────────────────────────────────────────────────────────
   // Lazily derive initial state from localStorage to avoid setState-in-effect
@@ -124,6 +169,10 @@ export default function StudentExam() {
         timeRemaining: existing.timeRemainingSeconds ?? INITIAL_SECONDS,
         isTimerRunning: true,
         tabSwitchWarnings: existing.tabSwitchWarnings || 0,
+        fullscreenExitsCount: existing.fullscreenExitsCount || 0,
+        autoTerminated: existing.autoTerminated || false,
+        terminationReason: existing.terminationReason || '',
+        scoreData: existing.scoreData || { score: 0, correctCount: 0, totalQuestions: 0, percentage: 0 },
       };
     }
     if (existing && existing.phase === 'SUBMITTED') {
@@ -134,8 +183,13 @@ export default function StudentExam() {
         securityEvents: existing.securityEvents || [],
         timeRemaining: 0,
         isTimerRunning: false,
-        tabSwitchWarnings: 0,
+        tabSwitchWarnings: existing.tabSwitchWarnings || 0,
+        fullscreenExitsCount: existing.fullscreenExitsCount || 0,
         submittedAt: existing.submittedAt,
+        autoSubmitted: existing.autoSubmitted || false,
+        autoTerminated: existing.autoTerminated || false,
+        terminationReason: existing.terminationReason || '',
+        scoreData: existing.scoreData || { score: 0, correctCount: 0, totalQuestions: 0, percentage: 0 },
       };
     }
     return {
@@ -146,6 +200,10 @@ export default function StudentExam() {
       timeRemaining: INITIAL_SECONDS,
       isTimerRunning: false,
       tabSwitchWarnings: 0,
+      fullscreenExitsCount: 0,
+      autoTerminated: false,
+      terminationReason: '',
+      scoreData: { score: 0, correctCount: 0, totalQuestions: 0, percentage: 0 },
     };
   };
 
@@ -165,8 +223,14 @@ export default function StudentExam() {
   );
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [submittedAt, setSubmittedAt] = useState(init.submittedAt || null);
-  const [autoSubmitted, setAutoSubmitted] = useState(false);
-  const [tabSwitchWarnings, setTabSwitchWarnings] = useState(init.tabSwitchWarnings);
+  const [autoSubmitted, setAutoSubmitted] = useState(init.autoSubmitted || false);
+  const [autoTerminated, setAutoTerminated] = useState(init.autoTerminated || false);
+  const [terminationReason, setTerminationReason] = useState(init.terminationReason || '');
+  const [tabSwitchWarnings, setTabSwitchWarnings] = useState(init.tabSwitchWarnings || 0);
+  const [fullscreenExitsCount, setFullscreenExitsCount] = useState(init.fullscreenExitsCount || 0);
+  const [scoreData, setScoreData] = useState(
+    init.scoreData || { score: 0, correctCount: 0, totalQuestions: 0, percentage: 0 }
+  );
 
   const navigate = useNavigate();
 
@@ -182,14 +246,81 @@ export default function StudentExam() {
     setShowSubmitConfirm(false);
     setSubmittedAt(null);
     setAutoSubmitted(false);
+    setAutoTerminated(false);
+    setTerminationReason('');
     setTabSwitchWarnings(0);
+    setFullscreenExitsCount(0);
+    setScoreData({ score: 0, correctCount: 0, totalQuestions: 0, percentage: 0 });
     setInstructionsAcknowledged(false);
     setPhase(PHASE.INSTRUCTIONS);
   };
 
-  // Ref to allow security callback to read latest state without stale closure
+  // Refs to allow async callbacks to read latest state without stale closure
   const phaseRef = useRef(phase);
   useEffect(() => { phaseRef.current = phase; }, [phase]);
+
+  const answersRef = useRef(answers);
+  useEffect(() => { answersRef.current = answers; }, [answers]);
+
+  const questionsRef = useRef(questions);
+  useEffect(() => { questionsRef.current = questions; }, [questions]);
+
+  const securityEventsRef = useRef(securityEvents);
+  useEffect(() => { securityEventsRef.current = securityEvents; }, [securityEvents]);
+
+  // ── Auto-Termination Handler ───────────────────────────────────────────────
+  const handleAutoTerminate = useCallback((reason) => {
+    if (phaseRef.current === PHASE.SUBMITTED) return;
+    setIsTimerRunning(false);
+    setAutoTerminated(true);
+    setTerminationReason(reason);
+    setPhase(PHASE.SUBMITTED);
+    setShowViolationModal(false);
+    setShowSubmitConfirm(false);
+    const now = new Date().toISOString();
+    setSubmittedAt(now);
+
+    const calculated = calculateExamScore(questionsRef.current, answersRef.current);
+    setScoreData(calculated);
+
+    const termEvent = createSecurityEvent(
+      SECURITY_EVENT_TYPE.AUTO_SUBMITTED,
+      SECURITY_SEVERITY.CRITICAL,
+      `Exam Disqualified & Auto-Terminated: ${reason}`
+    );
+    const finalEvents = [...securityEventsRef.current, termEvent];
+    setSecurityEvents(finalEvents);
+
+    if (cleanupListenersRef.current) {
+      cleanupListenersRef.current();
+      cleanupListenersRef.current = null;
+    }
+
+    saveSession(examId, {
+      phase: 'SUBMITTED',
+      answers: answersRef.current,
+      securityEvents: finalEvents,
+      submittedAt: now,
+      autoTerminated: true,
+      terminationReason: reason,
+      scoreData: calculated,
+    });
+
+    submitExam(examId, {
+      studentId: examMeta.candidateId || 'STU001',
+      studentName: examMeta.candidateName || 'Alex Morgan',
+      answers: answersRef.current,
+      score: calculated.score,
+      correctCount: calculated.correctCount,
+      totalQuestions: questionsRef.current.length,
+      status: 'terminated',
+      terminationReason: reason,
+    }).catch((err) => void err);
+
+    endExamAttempt(examMeta.candidateId || 'STU001', 'disqualified');
+
+    exitFullscreen();
+  }, [examId, examMeta.candidateId, examMeta.candidateName]);
 
   // ── Security Event Handler ─────────────────────────────────────────────────
   const handleSecurityEvent = useCallback((event) => {
@@ -203,16 +334,26 @@ export default function StudentExam() {
       return updated;
     });
 
-    // Handle specific event types
+    // Handle specific event types and check auto-termination thresholds
     if (event.type === SECURITY_EVENT_TYPE.FULLSCREEN_EXIT) {
-      setActiveViolationType('FULLSCREEN_EXIT');
-      setShowViolationModal(true);
+      setFullscreenExitsCount((prev) => {
+        const next = prev + 1;
+        if (next >= MAX_FULLSCREEN_EXITS) {
+          handleAutoTerminate(`Exceeded maximum allowed fullscreen exit infractions (${next}/${MAX_FULLSCREEN_EXITS})`);
+        } else {
+          setActiveViolationType('FULLSCREEN_EXIT');
+          setShowViolationModal(true);
+        }
+        return next;
+      });
     }
 
     if (event.type === SECURITY_EVENT_TYPE.TAB_SWITCH) {
       setTabSwitchWarnings((prev) => {
         const next = prev + 1;
-        if (next >= examMeta.maxTabSwitchWarnings) {
+        if (next >= MAX_TAB_SWITCHES) {
+          handleAutoTerminate(`Exceeded maximum allowed tab switch infractions (${next}/${MAX_TAB_SWITCHES})`);
+        } else {
           setActiveViolationType('TAB_SWITCH');
           setShowViolationModal(true);
         }
@@ -227,8 +368,12 @@ export default function StudentExam() {
       type: event.type,
       severity: event.severity,
       message: event.message
+    }).then((res) => {
+      if (res && res.autoSubmitted) {
+        handleAutoTerminate(res.autoSubmitMessage || 'ProctorAI high-risk behavioral anomaly threshold exceeded');
+      }
     }).catch((err) => void err);
-  }, [examId, examMeta.maxTabSwitchWarnings, examMeta.candidateId, examMeta.candidateName]);
+  }, [examId, MAX_TAB_SWITCHES, MAX_FULLSCREEN_EXITS, examMeta.candidateId, examMeta.candidateName, handleAutoTerminate]);
 
   // ── Security listeners lifecycle ───────────────────────────────────────────
   const cleanupListenersRef = useRef(null);
@@ -245,11 +390,6 @@ export default function StudentExam() {
     };
   }, [phase, handleSecurityEvent]);
 
-
-  // ── Restore session from localStorage on mount ─────────────────────────────
-  // NOTE: Session is restored via lazy useState above (initSession function)
-  // to avoid calling setState() synchronously inside a useEffect body.
-
   // ── Persist session during exam ────────────────────────────────────────────
   useEffect(() => {
     if (phase !== PHASE.ACTIVE) return;
@@ -260,9 +400,33 @@ export default function StudentExam() {
       securityEvents,
       timeRemainingSeconds: timeRemaining,
       tabSwitchWarnings,
+      fullscreenExitsCount,
       startedAt: loadSession(examId)?.startedAt || new Date().toISOString(),
     });
-  }, [answers, currentIndex, timeRemaining, tabSwitchWarnings, phase, examId, securityEvents]);
+  }, [answers, currentIndex, timeRemaining, tabSwitchWarnings, fullscreenExitsCount, phase, examId, securityEvents]);
+
+  // ── Sync active attempt & progress with invigilator dashboard ─────────────
+  useEffect(() => {
+    if (phase !== PHASE.ACTIVE) return;
+
+    const studentId = examMeta.candidateId || currentUser?.userId || 'STU001';
+    const totalQ = questions.length || 1;
+    const answered = Object.values(answers).filter((v) => v !== undefined && v !== '').length;
+    const progressPercent = Math.min(100, Math.round((answered / totalQ) * 100));
+
+    const sHours = Math.floor(timeRemaining / 3600);
+    const sMins = Math.floor((timeRemaining % 3600) / 60);
+    const sSecs = timeRemaining % 60;
+    const formatted = `${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:${String(sSecs).padStart(2, '0')}`;
+
+    updateExamProgress({
+      studentId,
+      progress: progressPercent,
+      timeRemainingSeconds: timeRemaining,
+      timeRemainingFormatted: formatted,
+      status: 'active'
+    });
+  }, [answers, timeRemaining, phase, questions.length, examMeta.candidateId, currentUser?.userId]);
 
   // ── Timer callbacks ────────────────────────────────────────────────────────
   const handleTimerTick = useCallback((secs) => {
@@ -272,21 +436,25 @@ export default function StudentExam() {
   const handleTimerExpire = useCallback(() => {
     setIsTimerRunning(false);
     setAutoSubmitted(true);
-    setSubmittedAt(new Date().toISOString());
+    const now = new Date().toISOString();
+    setSubmittedAt(now);
     setPhase(PHASE.SUBMITTED);
-    setSecurityEvents((prev) => [
-      ...prev,
-      createSecurityEvent(
-        SECURITY_EVENT_TYPE.AUTO_SUBMITTED,
-        SECURITY_SEVERITY.INFO,
-        'Exam automatically submitted — time expired'
-      ),
-    ]);
+    const calculated = calculateExamScore(questionsRef.current, answersRef.current);
+    setScoreData(calculated);
+    const expireEvent = createSecurityEvent(
+      SECURITY_EVENT_TYPE.AUTO_SUBMITTED,
+      SECURITY_SEVERITY.INFO,
+      'Exam automatically submitted — time expired'
+    );
+    const finalEvents = [...securityEventsRef.current, expireEvent];
+    setSecurityEvents(finalEvents);
     saveSession(examId, {
       phase: 'SUBMITTED',
-      answers,
-      securityEvents,
-      submittedAt: new Date().toISOString(),
+      answers: answersRef.current,
+      securityEvents: finalEvents,
+      submittedAt: now,
+      autoSubmitted: true,
+      scoreData: calculated,
     });
     clearSession(examId);
     if (cleanupListenersRef.current) {
@@ -296,13 +464,15 @@ export default function StudentExam() {
     submitExam(examId, {
       studentId: examMeta.candidateId || 'STU001',
       studentName: examMeta.candidateName || 'Alex Morgan',
-      answers,
-      score: 0,
-      totalQuestions: questions.length
+      answers: answersRef.current,
+      score: calculated.score,
+      correctCount: calculated.correctCount,
+      totalQuestions: questionsRef.current.length,
+      status: 'time_expired',
     }).catch((err) => void err);
+    endExamAttempt(examMeta.candidateId || 'STU001', 'completed');
     exitFullscreen();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [examId]);
+  }, [examId, examMeta.candidateId, examMeta.candidateName]);
 
   // ── Start exam ─────────────────────────────────────────────────────────────
   const handleStartExam = async () => {
@@ -325,10 +495,28 @@ export default function StudentExam() {
       securityEvents: [startedEvent],
       timeRemainingSeconds: INITIAL_SECONDS,
       tabSwitchWarnings: 0,
+      fullscreenExitsCount: 0,
       startedAt: new Date().toISOString(),
     });
     setPhase(PHASE.ACTIVE);
     setIsTimerRunning(true);
+
+    const sHours = Math.floor(INITIAL_SECONDS / 3600);
+    const sMins = Math.floor((INITIAL_SECONDS % 3600) / 60);
+    const sSecs = INITIAL_SECONDS % 60;
+    const durFormatted = `${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:${String(sSecs).padStart(2, '0')}`;
+
+    startExamAttempt({
+      examId,
+      studentId: examMeta.candidateId || currentUser?.userId || 'STU001',
+      studentName: examMeta.candidateName || currentUser?.name || 'Alex Johnson',
+      email: currentUser?.email || `${(examMeta.candidateId || 'stu001').toLowerCase()}@university.edu`,
+      examTitle: examMeta.name || examMeta.title || `Exam ${examId}`,
+      timeRemainingSeconds: INITIAL_SECONDS,
+      totalDurationSeconds: INITIAL_SECONDS,
+      timeRemainingFormatted: durFormatted,
+      totalDurationFormatted: durFormatted,
+    }).catch((err) => void err);
   };
 
   // ── Return to fullscreen after violation ───────────────────────────────────
@@ -362,6 +550,8 @@ export default function StudentExam() {
     const now = new Date().toISOString();
     setSubmittedAt(now);
     setPhase(PHASE.SUBMITTED);
+    const calculated = calculateExamScore(questions, answers);
+    setScoreData(calculated);
     const submitEvent = createSecurityEvent(
       SECURITY_EVENT_TYPE.EXAM_SUBMITTED,
       SECURITY_SEVERITY.INFO,
@@ -374,6 +564,8 @@ export default function StudentExam() {
       answers,
       securityEvents: finalEvents,
       submittedAt: now,
+      scoreData: calculated,
+      autoTerminated: false,
     });
     if (cleanupListenersRef.current) {
       cleanupListenersRef.current();
@@ -383,9 +575,14 @@ export default function StudentExam() {
       studentId: examMeta.candidateId || 'STU001',
       studentName: examMeta.candidateName || 'Alex Morgan',
       answers,
-      score: 0,
-      totalQuestions: questions.length
+      score: calculated.score,
+      correctCount: calculated.correctCount,
+      totalQuestions: questions.length,
+      status: 'submitted',
     }).catch((err) => void err);
+
+    endExamAttempt(examMeta.candidateId || 'STU001', 'completed');
+
     // Exit fullscreen
     exitFullscreen();
   };
@@ -659,30 +856,40 @@ export default function StudentExam() {
 
   // ── Submitted ──────────────────────────────────────────────────────────────
   if (phase === PHASE.SUBMITTED) {
+    const isPassing = scoreData.score >= 50;
+
     return (
       <div style={styles.fullPage}>
         <div
           style={{
             width: '100%',
-            maxWidth: '540px',
+            maxWidth: '560px',
             backgroundColor: '#ffffff',
             borderRadius: '16px',
-            border: '1px solid var(--border-subtle)',
+            border: autoTerminated ? '2px solid #ef4444' : '1px solid var(--border-subtle)',
             overflow: 'hidden',
             boxShadow: 'var(--shadow-xl)',
             textAlign: 'center',
           }}
         >
-          {/* Success header */}
+          {/* Header */}
           <div
             style={{
-              background: autoSubmitted
+              background: autoTerminated
+                ? 'linear-gradient(135deg, #991b1b 0%, #7f1d1d 100%)'
+                : autoSubmitted
                 ? 'linear-gradient(135deg, #b45309 0%, #92400e 100%)'
                 : 'linear-gradient(135deg, #047857 0%, #065f46 100%)',
               padding: '32px 28px',
             }}
           >
-            <CheckCircle size={48} color="#ffffff" style={{ marginBottom: '12px' }} />
+            {autoTerminated ? (
+              <AlertOctagon size={48} color="#ffffff" style={{ marginBottom: '12px' }} />
+            ) : autoSubmitted ? (
+              <AlertTriangle size={48} color="#ffffff" style={{ marginBottom: '12px' }} />
+            ) : (
+              <CheckCircle size={48} color="#ffffff" style={{ marginBottom: '12px' }} />
+            )}
             <h2
               style={{
                 fontSize: '22px',
@@ -692,25 +899,107 @@ export default function StudentExam() {
                 letterSpacing: '-0.02em',
               }}
             >
-              {autoSubmitted
+              {autoTerminated
+                ? 'Exam Auto-Terminated (Disqualified)'
+                : autoSubmitted
                 ? 'Time Expired — Exam Auto-Submitted'
                 : 'Examination Submitted Successfully'}
             </h2>
             <p
               style={{
                 fontSize: '13px',
-                color: 'rgba(255,255,255,0.8)',
+                color: 'rgba(255,255,255,0.88)',
                 margin: 0,
                 marginTop: '8px',
+                lineHeight: 1.5,
               }}>
-              {autoSubmitted
-                ? 'Your time ran out. All answers recorded up to this point have been saved.'
-                : 'Your answers have been recorded and submitted to your institution.'}
+              {autoTerminated
+                ? terminationReason || 'Security infractions exceeded the allowed threshold. Exam session has been closed.'
+                : autoSubmitted
+                ? 'Your time ran out. All answers recorded up to this point have been saved and evaluated.'
+                : 'Your answers have been recorded, evaluated, and submitted to your institution.'}
             </p>
           </div>
 
-          {/* Summary */}
+          {/* Body */}
           <div style={{ padding: '28px' }}>
+            {/* Score Card */}
+            <div
+              style={{
+                background: 'linear-gradient(135deg, #071524 0%, #0f2b48 100%)',
+                borderRadius: '12px',
+                padding: '20px 24px',
+                color: '#ffffff',
+                marginBottom: '22px',
+                border: '1px solid rgba(38,198,218,0.3)',
+                boxShadow: '0 4px 16px rgba(7,21,36,0.25)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '16px',
+              }}
+            >
+              <div style={{ textAlign: 'left' }}>
+                <div
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                    color: '#26c6da',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <Award size={14} color="#26c6da" /> Evaluated Exam Score
+                </div>
+                <div
+                  style={{
+                    fontSize: '36px',
+                    fontWeight: 900,
+                    marginTop: '2px',
+                    color: '#ffffff',
+                    letterSpacing: '-0.02em',
+                  }}
+                >
+                  {scoreData.score}%
+                </div>
+                <div style={{ fontSize: '12.5px', color: '#94b4cf', marginTop: '2px' }}>
+                  <strong>{scoreData.correctCount}</strong> of <strong>{scoreData.totalQuestions || questions.length}</strong> questions answered correctly
+                </div>
+              </div>
+
+              <div
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '20px',
+                  backgroundColor:
+                    scoreData.score >= 70
+                      ? 'rgba(16, 185, 129, 0.2)'
+                      : isPassing
+                      ? 'rgba(56, 189, 248, 0.2)'
+                      : 'rgba(239, 68, 68, 0.2)',
+                  border:
+                    '1px solid ' +
+                    (scoreData.score >= 70 ? '#10b981' : isPassing ? '#38bdf8' : '#ef4444'),
+                  color:
+                    scoreData.score >= 70 ? '#34d399' : isPassing ? '#7dd3fc' : '#f87171',
+                  fontWeight: 800,
+                  fontSize: '12px',
+                  letterSpacing: '0.04em',
+                  textAlign: 'center',
+                }}
+              >
+                {scoreData.score >= 70
+                  ? 'PASSED · EXCELLENT'
+                  : isPassing
+                  ? 'PASSED · SATISFACTORY'
+                  : 'BELOW PASSING'}
+              </div>
+            </div>
+
+            {/* Summary Grid */}
             <div
               style={{
                 display: 'grid',
@@ -722,10 +1011,12 @@ export default function StudentExam() {
               {[
                 { label: 'Exam', value: examMeta.title },
                 { label: 'Submitted At', value: submittedAt ? formatSubmissionTime(submittedAt) : '—' },
+                { label: 'Final Score', value: `${scoreData.score}% (${scoreData.correctCount}/${scoreData.totalQuestions || questions.length})` },
+                { label: 'Completion Status', value: autoTerminated ? 'Disqualified' : autoSubmitted ? 'Auto-Submitted' : 'Completed' },
                 { label: 'Questions Answered', value: `${answeredCount} / ${questions.length}` },
                 { label: 'Questions Pending', value: `${questions.length - answeredCount} / ${questions.length}` },
                 { label: 'Security Events', value: violations.total },
-                { label: 'Tab Switches', value: violations.tabSwitches },
+                { label: 'Tab Switches', value: `${tabSwitchWarnings} / ${MAX_TAB_SWITCHES}` },
               ].map(({ label, value }) => (
                 <div
                   key={label}
@@ -737,10 +1028,32 @@ export default function StudentExam() {
                     textAlign: 'left',
                   }}
                 >
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '4px' }}>
+                  <div
+                    style={{
+                      fontSize: '11px',
+                      color: 'var(--text-muted)',
+                      fontWeight: 600,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                      marginBottom: '4px',
+                    }}
+                  >
                     {label}
                   </div>
-                  <div style={{ fontSize: '14.5px', fontWeight: 700, color: 'var(--pt-navy-900)' }}>
+                  <div
+                    style={{
+                      fontSize: '14px',
+                      fontWeight: 700,
+                      color:
+                        label === 'Final Score'
+                          ? isPassing
+                            ? '#047857'
+                            : '#b91c1c'
+                          : label === 'Completion Status' && autoTerminated
+                          ? '#b91c1c'
+                          : 'var(--pt-navy-900)',
+                    }}
+                  >
                     {value}
                   </div>
                 </div>
@@ -755,8 +1068,9 @@ export default function StudentExam() {
                 marginBottom: '22px',
               }}
             >
-              Your security report will be reviewed by your instructor.
-              You may now close this window.
+              {autoTerminated
+                ? 'Your proctor and examination committee have been notified of this security termination.'
+                : 'Your security audit report and evaluated score have been recorded in the invigilation system.'}
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -817,9 +1131,17 @@ export default function StudentExam() {
       <SecurityViolationModal
         isVisible={showViolationModal}
         violationType={activeViolationType}
-        fullscreenExits={violations.fullscreenExits}
-        tabSwitches={violations.tabSwitches}
+        fullscreenExits={fullscreenExitsCount}
+        tabSwitches={tabSwitchWarnings}
+        maxTabSwitches={MAX_TAB_SWITCHES}
+        maxFullscreenExits={MAX_FULLSCREEN_EXITS}
+        isTerminated={autoTerminated}
+        terminationReason={terminationReason}
         onReturnToFullscreen={handleReturnToFullscreen}
+        onAcknowledgeTermination={() => {
+          setShowViolationModal(false);
+          setPhase(PHASE.SUBMITTED);
+        }}
       />
 
       {/* Submit confirmation modal */}

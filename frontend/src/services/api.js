@@ -87,10 +87,19 @@ function normalizeCandidate(c) {
   if (!checks.faceDetection) {
     checks = { faceDetection: 'passed', audioLevel: 'normal', tabSwitches: 0, gazeTracking: 'focused' };
   }
+
+  const riskFormatted = c.risk
+    ? c.risk.charAt(0).toUpperCase() + c.risk.slice(1).toLowerCase()
+    : 'Low';
+
+  const studentName = c.candidate || c.name || 'Student Candidate';
+
   return {
     ...c,
-    student: c.candidate || c.name || 'Candidate',
-    avatar: c.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop&crop=faces',
+    candidate: studentName,
+    student: studentName,
+    avatar: c.avatar || studentName.slice(0, 2).toUpperCase(),
+    risk: riskFormatted,
     checks,
     timeline
   };
@@ -181,21 +190,170 @@ export async function getRecentViolations() {
   }
 }
 
+// ── Active Student Exam Attempt Tracking ────────────────────────────────────
+const ACTIVE_ATTEMPTS_STORAGE_KEY = 'proctor_active_attempts';
+
+function getLocalActiveAttempts() {
+  try {
+    const raw = localStorage.getItem(ACTIVE_ATTEMPTS_STORAGE_KEY);
+    if (!raw) return [];
+    const list = JSON.parse(raw);
+    return Array.isArray(list) ? list.filter((a) => a.status === 'active') : [];
+  } catch (err) {
+    void err;
+    return [];
+  }
+}
+
+export function saveLocalActiveAttempt(attempt) {
+  try {
+    const existing = getLocalActiveAttempts().filter((a) => a.id !== attempt.id);
+    if (attempt.status === 'active') {
+      existing.push(attempt);
+    }
+    localStorage.setItem(ACTIVE_ATTEMPTS_STORAGE_KEY, JSON.stringify(existing));
+  } catch (err) {
+    void err;
+  }
+}
+
+export function removeLocalActiveAttempt(studentId) {
+  try {
+    const existing = getLocalActiveAttempts().filter((a) => a.id !== studentId);
+    localStorage.setItem(ACTIVE_ATTEMPTS_STORAGE_KEY, JSON.stringify(existing));
+  } catch (err) {
+    void err;
+  }
+}
+
 /**
  * Live Monitored Candidates API: GET /api/candidates/live
+ * Shows ONLY candidates currently attempting exams. Excludes hardcoded dummy seeds.
  */
 export async function getActiveCandidates() {
-  if (USE_MOCK_FALLBACK) {
-    return [...mockCandidates];
-  }
+  let backendCandidates = [];
   try {
     const res = await fetch(`${API_BASE_URL}/api/candidates/live`);
-    if (!res.ok) throw new Error('Failed to fetch active candidates');
-    const data = await res.json();
-    return data.map(normalizeCandidate);
+    if (res.ok) {
+      const data = await res.json();
+      backendCandidates = (Array.isArray(data) ? data : [])
+        .filter((c) => c.id && !c.id.startsWith('cand-') && (c.status || '').toLowerCase() === 'active')
+        .map(normalizeCandidate);
+    }
   } catch (err) {
-    console.warn('Active candidates fallback:', err);
-    return [...mockCandidates];
+    console.warn('Active candidates fetch fallback:', err);
+  }
+
+  // Merge with cross-tab local active attempts if any
+  const localAttempts = getLocalActiveAttempts().map(normalizeCandidate);
+  const candidateMap = new Map();
+
+  // Add backend candidates first
+  backendCandidates.forEach((c) => candidateMap.set(c.id, c));
+
+  // Merge local attempts (giving preference to active live state)
+  localAttempts.forEach((c) => {
+    if (!candidateMap.has(c.id)) {
+      candidateMap.set(c.id, c);
+    }
+  });
+
+  return Array.from(candidateMap.values());
+}
+
+/**
+ * Register active exam attempt when student starts taking an exam.
+ */
+export async function startExamAttempt(attemptData) {
+  const localCandidate = {
+    id: attemptData.studentId,
+    candidate: attemptData.studentName,
+    student: attemptData.studentName,
+    email: attemptData.email || `${attemptData.studentId.toLowerCase()}@university.edu`,
+    exam: attemptData.examTitle || `Exam ${attemptData.examId}`,
+    avatar: (attemptData.studentName || 'ST').slice(0, 2).toUpperCase(),
+    timeRemaining: attemptData.timeRemainingFormatted || '01:30:00',
+    totalDuration: attemptData.totalDurationFormatted || '01:30:00',
+    progress: 0,
+    status: 'active',
+    risk: 'Low',
+    riskScore: 0,
+    checks: {
+      faceDetection: 'passed',
+      audioLevel: 'normal',
+      tabSwitches: 0,
+      gazeTracking: 'focused'
+    },
+    timeline: [
+      {
+        time: new Date().toLocaleTimeString(),
+        event: `Exam started: ${attemptData.examTitle || attemptData.examId}`,
+        type: 'info'
+      }
+    ]
+  };
+
+  saveLocalActiveAttempt(localCandidate);
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/candidates/start-attempt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(attemptData)
+    });
+    if (res.ok) {
+      const saved = await res.json();
+      return normalizeCandidate(saved);
+    }
+  } catch (err) {
+    console.warn('Backend start-attempt sync failed, using local attempt:', err);
+  }
+
+  return normalizeCandidate(localCandidate);
+}
+
+/**
+ * Update candidate progress during exam attempt.
+ */
+export async function updateExamProgress(progressData) {
+  try {
+    const localList = getLocalActiveAttempts();
+    const candidate = localList.find((c) => c.id === progressData.studentId);
+    if (candidate) {
+      if (progressData.progress !== undefined) candidate.progress = progressData.progress;
+      if (progressData.timeRemainingFormatted) candidate.timeRemaining = progressData.timeRemainingFormatted;
+      if (progressData.riskScore !== undefined) candidate.riskScore = progressData.riskScore;
+      if (progressData.risk) candidate.risk = progressData.risk;
+      saveLocalActiveAttempt(candidate);
+    }
+  } catch (err) {
+    void err;
+  }
+
+  try {
+    await fetch(`${API_BASE_URL}/api/candidates/update-progress`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(progressData)
+    });
+  } catch (err) {
+    void err;
+  }
+}
+
+/**
+ * Mark student exam attempt completed/disqualified.
+ */
+export async function endExamAttempt(studentId, finalStatus = 'completed') {
+  removeLocalActiveAttempt(studentId);
+  try {
+    await fetch(`${API_BASE_URL}/api/candidates/update-progress`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ studentId, status: finalStatus })
+    });
+  } catch (err) {
+    void err;
   }
 }
 

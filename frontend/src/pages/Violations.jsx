@@ -3,6 +3,7 @@ import { AlertTriangle, Clock, Eye, CheckCircle, XCircle, ShieldAlert } from 'lu
 import RiskBadge from '../components/common/RiskBadge';
 import StatusBadge from '../components/common/StatusBadge';
 import SearchBar from '../components/common/SearchBar';
+import UserAvatar from '../components/common/UserAvatar';
 import Modal from '../components/common/Modal';
 import EmptyState from '../components/common/EmptyState';
 import LoadingSpinner from '../components/common/LoadingSpinner';
@@ -154,9 +155,7 @@ export default function Violations() {
                   <tr key={v.id}>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div className="avatar-circle">
-                          {v.avatar || v.student.slice(0, 2).toUpperCase()}
-                        </div>
+                        <UserAvatar avatar={v.avatar} name={v.student} size={32} />
                         <div style={{ fontWeight: 600, color: '#0f172a' }}>
                           {v.student}
                         </div>

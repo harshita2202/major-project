@@ -36,6 +36,18 @@ public class DatabaseSeeder implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
+        // Clean up hardcoded dummy candidates so only active students attempting exams are listed
+        try {
+            List<String> hardcodedIds = List.of("cand-1", "cand-2", "cand-3", "cand-4");
+            for (String id : hardcodedIds) {
+                if (candidateRepository.existsById(id)) {
+                    candidateRepository.deleteById(id);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Note: Cleanup hardcoded candidates: " + e.getMessage());
+        }
+
         if (examRepository.count() > 0) {
             System.out.println("Database already contains exams, skipping seeding.");
             return;
@@ -179,72 +191,7 @@ public class DatabaseSeeder implements CommandLineRunner {
 
         questionRepository.saveAll(List.of(q1, q2, q3, q4, q5, q6));
 
-        // 4. Seed Live Candidates
-        Candidate c1 = new Candidate(
-                "cand-1",
-                "Alex Morgan",
-                "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop&crop=faces",
-                "alex.morgan@university.edu",
-                "CS301 - Data Structures & Algorithms",
-                "01:24:15",
-                "02:00:00",
-                65,
-                "active",
-                "low",
-                12,
-                "{\"faceDetection\":\"passed\",\"audioLevel\":\"normal\",\"tabSwitches\":0,\"gazeTracking\":\"focused\"}",
-                "[]"
-        );
-
-        Candidate c2 = new Candidate(
-                "cand-2",
-                "David Chen",
-                "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=faces",
-                "david.chen@university.edu",
-                "CS501 - Advanced Coding & Algorithm Lab",
-                "00:48:30",
-                "01:30:00",
-                42,
-                "active",
-                "medium",
-                45,
-                "{\"faceDetection\":\"warning\",\"audioLevel\":\"normal\",\"tabSwitches\":1,\"gazeTracking\":\"distracted\"}",
-                "[]"
-        );
-
-        Candidate c3 = new Candidate(
-                "cand-3",
-                "Sarah Jenkins",
-                "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop&crop=faces",
-                "sarah.j@university.edu",
-                "CS301 - Data Structures & Algorithms",
-                "01:45:00",
-                "02:00:00",
-                15,
-                "active",
-                "high",
-                82,
-                "{\"faceDetection\":\"failed\",\"audioLevel\":\"elevated\",\"tabSwitches\":3,\"gazeTracking\":\"away\"}",
-                "[]"
-        );
-
-        Candidate c4 = new Candidate(
-                "cand-4",
-                "Marcus Brody",
-                "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&h=100&fit=crop&crop=faces",
-                "m.brody@university.edu",
-                "CS501 - Advanced Coding & Algorithm Lab",
-                "01:10:20",
-                "01:30:00",
-                80,
-                "active",
-                "low",
-                5,
-                "{\"faceDetection\":\"passed\",\"audioLevel\":\"normal\",\"tabSwitches\":0,\"gazeTracking\":\"focused\"}",
-                "[]"
-        );
-
-        candidateRepository.saveAll(List.of(c1, c2, c3, c4));
+        // 4. Candidates are populated dynamically when real students begin attempting exams (no hardcoded seeds)
 
         // 5. Seed Students
         Student s1 = new Student("STU001", "Alex Morgan", "alex.morgan@university.edu", "CS301 - Data Structures", "Active", "low", "2 mins ago");

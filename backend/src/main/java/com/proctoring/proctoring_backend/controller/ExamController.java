@@ -5,6 +5,8 @@ import com.proctoring.proctoring_backend.entity.ExamSubmission;
 import com.proctoring.proctoring_backend.entity.Question;
 import com.proctoring.proctoring_backend.entity.SecurityEventEntity;
 import com.proctoring.proctoring_backend.entity.Violation;
+import com.proctoring.proctoring_backend.entity.Candidate;
+import com.proctoring.proctoring_backend.repository.CandidateRepository;
 import com.proctoring.proctoring_backend.repository.ExamRepository;
 import com.proctoring.proctoring_backend.repository.ExamSubmissionRepository;
 import com.proctoring.proctoring_backend.repository.QuestionRepository;
@@ -26,6 +28,7 @@ public class ExamController {
     private final ExamSubmissionRepository submissionRepository;
     private final SecurityEventRepository securityEventRepository;
     private final ViolationRepository violationRepository;
+    private final CandidateRepository candidateRepository;
     private final com.proctoring.proctoring_backend.service.ProctoringEventService proctoringEventService;
 
     public ExamController(ExamRepository examRepository,
@@ -33,12 +36,14 @@ public class ExamController {
                           ExamSubmissionRepository submissionRepository,
                           SecurityEventRepository securityEventRepository,
                           ViolationRepository violationRepository,
+                          CandidateRepository candidateRepository,
                           com.proctoring.proctoring_backend.service.ProctoringEventService proctoringEventService) {
         this.examRepository = examRepository;
         this.questionRepository = questionRepository;
         this.submissionRepository = submissionRepository;
         this.securityEventRepository = securityEventRepository;
         this.violationRepository = violationRepository;
+        this.candidateRepository = candidateRepository;
         this.proctoringEventService = proctoringEventService;
     }
 
@@ -100,6 +105,7 @@ public class ExamController {
         String answersJson = answersObj != null ? answersObj.toString() : "{}";
         int score = payload.containsKey("score") ? ((Number) payload.get("score")).intValue() : 0;
         int totalQuestions = payload.containsKey("totalQuestions") ? ((Number) payload.get("totalQuestions")).intValue() : 0;
+        String status = (String) payload.getOrDefault("status", "submitted");
 
         ExamSubmission submission = new ExamSubmission(
                 submissionId,
@@ -109,16 +115,23 @@ public class ExamController {
                 answersJson,
                 score,
                 totalQuestions,
-                "submitted"
+                status
         );
         submissionRepository.save(submission);
+
+        // Update candidate status if present
+        candidateRepository.findById(studentId).ifPresent(candidate -> {
+            candidate.setStatus("terminated".equalsIgnoreCase(status) ? "disqualified" : "completed");
+            candidateRepository.save(candidate);
+        });
 
         Map<String, Object> response = new HashMap<>();
         response.put("success", true);
         response.put("submissionId", submissionId);
-        response.put("message", "Exam submitted successfully");
+        response.put("message", "terminated".equalsIgnoreCase(status) ? "Exam terminated and recorded" : "Exam submitted successfully");
         response.put("score", score);
         response.put("totalQuestions", totalQuestions);
+        response.put("status", status);
         return ResponseEntity.ok(response);
     }
 

@@ -36,7 +36,7 @@ export default function Dashboard() {
           setStats(statsRes);
           setActivityData(activityRes);
           setViolations(violationsRes);
-          setCandidates(candidatesRes.slice(0, 4));
+          setCandidates(candidatesRes || []);
         }
       } catch (err) {
         if (!ignore) console.error('Failed to load dashboard data:', err);
@@ -62,7 +62,7 @@ export default function Dashboard() {
       setStats(statsRes);
       setActivityData(activityRes);
       setViolations(violationsRes);
-      setCandidates(candidatesRes.slice(0, 4));
+      setCandidates(candidatesRes || []);
     } catch (err) {
       console.error('Failed to refresh dashboard data:', err);
     } finally {

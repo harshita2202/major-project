@@ -40,11 +40,8 @@ public class DashboardController {
         }
 
         long liveStudents = candidates.stream()
-                .filter(c -> "active".equalsIgnoreCase(c.getStatus()))
+                .filter(c -> c.getId() != null && !c.getId().startsWith("cand-") && "active".equalsIgnoreCase(c.getStatus()))
                 .count();
-        if (liveStudents == 0 && !candidates.isEmpty()) {
-            liveStudents = candidates.size();
-        }
 
         long highRiskAlerts = violations.stream()
                 .filter(v -> "high".equalsIgnoreCase(v.getSeverity()))

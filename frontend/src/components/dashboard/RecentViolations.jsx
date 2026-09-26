@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ArrowUpRight, Clock, ShieldAlert } from 'lucide-react';
 import RiskBadge from '../common/RiskBadge';
+import UserAvatar from '../common/UserAvatar';
 
 export default function RecentViolations({ violations = [], onSelectViolation }) {
   return (
@@ -53,9 +54,7 @@ export default function RecentViolations({ violations = [], onSelectViolation })
               >
                 {/* Student & Violation Detail */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-                  <div className="avatar-circle">
-                    {v.avatar || v.student.slice(0, 2).toUpperCase()}
-                  </div>
+                  <UserAvatar avatar={v.avatar} name={v.student} size={36} />
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--pt-navy-900)' }}>

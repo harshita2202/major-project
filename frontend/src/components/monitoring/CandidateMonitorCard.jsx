@@ -1,9 +1,21 @@
-import { Clock, Eye, Check, AlertCircle, ShieldAlert } from 'lucide-react';
+import { useState } from 'react';
+import { Clock, Eye, Check, AlertCircle, ShieldAlert, Camera, EyeOff } from 'lucide-react';
 import CameraPlaceholder from './CameraPlaceholder';
 import RiskBadge from '../common/RiskBadge';
 import StatusBadge from '../common/StatusBadge';
 
+import UserAvatar from '../common/UserAvatar';
+
+/**
+ * CandidateMonitorCard.jsx
+ * Monitored candidate card.
+ *
+ * To avoid streaming camera monitoring for every student simultaneously,
+ * camera feeds are on-demand: clicking "Show Camera" or the candidate name
+ * reveals the camera stream for that individual student.
+ */
 export default function CandidateMonitorCard({ candidate, onMonitor }) {
+  const [showInlineCamera, setShowInlineCamera] = useState(false);
   const { checks, risk, riskScore } = candidate;
 
   const isHighRisk = risk === 'High';
@@ -17,7 +29,8 @@ export default function CandidateMonitorCard({ candidate, onMonitor }) {
         display: 'flex',
         flexDirection: 'column',
         borderColor: isHighRisk ? '#fecaca' : isWarning ? '#fde68a' : 'var(--border-subtle)',
-        boxShadow: isHighRisk ? '0 4px 14px rgba(220, 38, 38, 0.12)' : 'var(--shadow-sm)'
+        boxShadow: isHighRisk ? '0 4px 14px rgba(220, 38, 38, 0.12)' : 'var(--shadow-sm)',
+        transition: 'all 0.2s ease',
       }}
     >
       {/* Top Candidate & Session Info */}
@@ -28,25 +41,58 @@ export default function CandidateMonitorCard({ candidate, onMonitor }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          backgroundColor: isHighRisk ? '#fff5f5' : isWarning ? '#fffdf5' : '#ffffff'
+          gap: '12px',
+          backgroundColor: isHighRisk ? '#fff5f5' : isWarning ? '#fffdf5' : '#ffffff',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div className="avatar-circle">
-            {candidate.avatar || candidate.candidate.slice(0, 2).toUpperCase()}
-          </div>
-          <div>
-            <h4 style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--pt-navy-900)', margin: 0 }}>
-              {candidate.candidate}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            cursor: 'pointer',
+            minWidth: 0,
+            flex: 1,
+          }}
+          onClick={() => onMonitor && onMonitor(candidate)}
+          title="Click to view candidate camera"
+        >
+          <UserAvatar avatar={candidate.avatar} name={candidate.candidate} size={38} />
+          <div style={{ minWidth: 0, overflow: 'hidden' }}>
+            <h4
+              style={{
+                fontSize: '13.5px',
+                fontWeight: 800,
+                color: 'var(--pt-navy-900)',
+                margin: 0,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{candidate.candidate}</span>
+              <Camera size={12} color="var(--pt-blue-600)" style={{ flexShrink: 0 }} />
             </h4>
-            <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+            <div
+              style={{
+                fontSize: '11.5px',
+                color: 'var(--text-secondary)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                marginTop: '1px',
+              }}
+            >
               {candidate.exam}
             </div>
           </div>
         </div>
 
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 700, color: 'var(--pt-navy-900)' }}>
+        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px', fontSize: '12px', fontWeight: 700, color: 'var(--pt-navy-900)' }}>
             <Clock size={12} color="var(--pt-blue-800)" /> {candidate.timeRemaining}
           </div>
           <div style={{ marginTop: '2px' }}>
@@ -55,15 +101,88 @@ export default function CandidateMonitorCard({ candidate, onMonitor }) {
         </div>
       </div>
 
-      {/* Proctortrack Camera Feed */}
+      {/* On-Demand Camera Area - Does NOT display camera feeds for all students simultaneously */}
       <div style={{ padding: '14px 18px 0 18px' }}>
-        <CameraPlaceholder
-          candidateName={candidate.candidate}
-          risk={candidate.risk}
-          aspectRatio="16/9"
-          isCompact={true}
-          sessionId={`PT-${candidate.id?.toUpperCase() || 'SESSION'}`}
-        />
+        {showInlineCamera ? (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '6px' }}>
+              <button
+                type="button"
+                onClick={() => setShowInlineCamera(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                <EyeOff size={11} /> Hide Camera Feed
+              </button>
+            </div>
+            <CameraPlaceholder
+              candidateName={candidate.candidate}
+              risk={candidate.risk}
+              aspectRatio="16/9"
+              isCompact={true}
+              sessionId={`PT-${candidate.id?.toUpperCase() || 'SESSION'}`}
+            />
+          </div>
+        ) : (
+          <div
+            onClick={() => setShowInlineCamera(true)}
+            style={{
+              width: '100%',
+              aspectRatio: '16/8',
+              backgroundColor: '#0a1c30',
+              borderRadius: '8px',
+              border: '1.5px dashed rgba(38, 198, 218, 0.35)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              padding: '16px',
+              textAlign: 'center',
+              transition: 'all 0.2s ease',
+              boxShadow: 'inset 0 0 15px rgba(0,0,0,0.5)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = '#26c6da';
+              e.currentTarget.style.backgroundColor = '#0e243c';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = 'rgba(38, 198, 218, 0.35)';
+              e.currentTarget.style.backgroundColor = '#0a1c30';
+            }}
+          >
+            <div
+              style={{
+                width: '38px',
+                height: '38px',
+                borderRadius: '50%',
+                backgroundColor: 'rgba(38, 198, 218, 0.12)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: '8px',
+                border: '1px solid rgba(38, 198, 218, 0.3)',
+              }}
+            >
+              <Camera size={18} color="#26c6da" />
+            </div>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#e2e8f0', letterSpacing: '0.01em' }}>
+              Click to View Camera Feed
+            </div>
+            <div style={{ fontSize: '11px', color: '#8eaec9', marginTop: '3px' }}>
+              1080p WebCam &bull; Biometric Stream Standby
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Proctortrack PEEP Telemetry Checklist */}
@@ -112,7 +231,7 @@ export default function CandidateMonitorCard({ candidate, onMonitor }) {
           backgroundColor: 'var(--bg-surface-subtle)',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between'
+          justifyContent: 'space-between',
         }}
       >
         <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
@@ -125,8 +244,8 @@ export default function CandidateMonitorCard({ candidate, onMonitor }) {
           onClick={() => onMonitor && onMonitor(candidate)}
           style={{ fontSize: '12px', gap: '5px' }}
         >
-          {isHighRisk ? <ShieldAlert size={13} /> : <Eye size={13} />}
-          <span>{isHighRisk ? 'Audit Incident' : 'Live Supervise'}</span>
+          {isHighRisk ? <ShieldAlert size={13} /> : <Camera size={13} />}
+          <span>{isHighRisk ? 'Audit Incident' : 'View Camera Feed'}</span>
         </button>
       </div>
     </div>

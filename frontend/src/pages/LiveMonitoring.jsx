@@ -15,18 +15,34 @@ export default function LiveMonitoring() {
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [sortBy, setSortBy] = useState('risk-desc');
 
-  useEffect(() => {
-    async function loadCandidates() {
-      try {
-        const data = await getActiveCandidates();
-        setCandidates(data);
-      } catch (err) {
-        console.error('Error fetching live candidates:', err);
-      } finally {
-        setLoading(false);
-      }
+  const fetchCandidates = async () => {
+    try {
+      const data = await getActiveCandidates();
+      setCandidates(data);
+    } catch (err) {
+      console.error('Error fetching live candidates:', err);
+    } finally {
+      setLoading(false);
     }
-    loadCandidates();
+  };
+
+  useEffect(() => {
+    fetchCandidates();
+    // Auto-refresh every 3 seconds to reflect newly started or completed student attempts in real-time
+    const interval = setInterval(fetchCandidates, 3000);
+    const handleFocus = () => fetchCandidates();
+    const handleStorage = (e) => {
+      if (e.key === 'proctor_active_attempts') fetchCandidates();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('storage', handleStorage);
+    };
   }, []);
 
   // Filter and search logic
@@ -35,11 +51,11 @@ export default function LiveMonitoring() {
 
     // Filter by risk tier
     if (activeFilter === 'Normal') {
-      list = list.filter((c) => c.risk === 'Low');
+      list = list.filter((c) => (c.risk || '').toLowerCase() === 'low');
     } else if (activeFilter === 'Warning') {
-      list = list.filter((c) => c.risk === 'Medium');
+      list = list.filter((c) => (c.risk || '').toLowerCase() === 'medium');
     } else if (activeFilter === 'High Risk') {
-      list = list.filter((c) => c.risk === 'High');
+      list = list.filter((c) => (c.risk || '').toLowerCase() === 'high');
     }
 
     // Search by name or exam
@@ -47,19 +63,19 @@ export default function LiveMonitoring() {
       const term = searchTerm.toLowerCase();
       list = list.filter(
         (c) =>
-          c.candidate.toLowerCase().includes(term) ||
-          c.exam.toLowerCase().includes(term) ||
-          c.email.toLowerCase().includes(term)
+          (c.candidate && c.candidate.toLowerCase().includes(term)) ||
+          (c.exam && c.exam.toLowerCase().includes(term)) ||
+          (c.email && c.email.toLowerCase().includes(term))
       );
     }
 
     // Sort
     if (sortBy === 'risk-desc') {
-      list.sort((a, b) => b.riskScore - a.riskScore);
+      list.sort((a, b) => (b.riskScore || 0) - (a.riskScore || 0));
     } else if (sortBy === 'risk-asc') {
-      list.sort((a, b) => a.riskScore - b.riskScore);
+      list.sort((a, b) => (a.riskScore || 0) - (b.riskScore || 0));
     } else if (sortBy === 'name') {
-      list.sort((a, b) => a.candidate.localeCompare(b.candidate));
+      list.sort((a, b) => (a.candidate || '').localeCompare(b.candidate || ''));
     }
 
     return list;
@@ -68,9 +84,9 @@ export default function LiveMonitoring() {
   const countSummary = useMemo(() => {
     return {
       all: candidates.length,
-      normal: candidates.filter((c) => c.risk === 'Low').length,
-      warning: candidates.filter((c) => c.risk === 'Medium').length,
-      high: candidates.filter((c) => c.risk === 'High').length
+      normal: candidates.filter((c) => (c.risk || '').toLowerCase() === 'low').length,
+      warning: candidates.filter((c) => (c.risk || '').toLowerCase() === 'medium').length,
+      high: candidates.filter((c) => (c.risk || '').toLowerCase() === 'high').length
     };
   }, [candidates]);
 
@@ -248,13 +264,17 @@ export default function LiveMonitoring() {
 
       {/* Candidates Grid */}
       {filteredCandidates.length === 0 ? (
-        <div className="card">
+        <div className="card" style={{ padding: '40px 20px', textAlign: 'center' }}>
           <EmptyState
             icon={Users}
-            title="No Candidates Found"
-            description="No active candidates matched your current filter criteria."
-            actionText="Reset Filters"
-            onAction={() => {
+            title={candidates.length === 0 ? "No Students Currently Attempting Exams" : "No Candidates Match Filter"}
+            description={
+              candidates.length === 0
+                ? "Active candidates will appear here automatically in real-time as soon as students begin their examination sessions."
+                : "No active candidates match your current risk filter or search keywords."
+            }
+            actionText={candidates.length === 0 ? undefined : "Reset Filters"}
+            onAction={candidates.length === 0 ? undefined : () => {
               setActiveFilter('All');
               setSearchTerm('');
             }}

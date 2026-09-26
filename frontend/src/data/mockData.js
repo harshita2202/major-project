@@ -100,8 +100,9 @@ export const mockRecentViolations = [
     details: 'Acoustic spike above 65dB; ambient conversational frequency detected.'
   }
 ];
-
-export const mockCandidates = [
+// Live candidates populated dynamically when students are attempting exams
+export const mockCandidates = [];
+const _legacyMockCandidates = [
   {
     id: 'cand-01',
     candidate: 'Rahul Sharma',
