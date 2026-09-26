@@ -95,8 +95,25 @@ export default function CandidateMonitorCard({ candidate, onMonitor }) {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px', fontSize: '12px', fontWeight: 700, color: 'var(--pt-navy-900)' }}>
             <Clock size={12} color="var(--pt-blue-800)" /> {candidate.timeRemaining}
           </div>
-          <div style={{ marginTop: '2px' }}>
+          <div style={{ marginTop: '2px', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
             <StatusBadge status={candidate.status} size="sm" />
+            {candidate.cheatingFlag && (
+              <span
+                style={{
+                  fontSize: '9.5px',
+                  fontWeight: 800,
+                  backgroundColor: '#fee2e2',
+                  color: '#dc2626',
+                  border: '1px solid #fca5a5',
+                  borderRadius: '3px',
+                  padding: '1px 5px',
+                  letterSpacing: '0.03em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                Cheating Flagged
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -221,6 +238,13 @@ export default function CandidateMonitorCard({ candidate, onMonitor }) {
           <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>PEEP Risk Score</span>
           <RiskBadge level={risk} score={riskScore} />
         </div>
+
+        {candidate.latestEvent && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', backgroundColor: '#fef2f2', padding: '4px 8px', borderRadius: '4px', border: '1px solid #fee2e2' }}>
+            <span style={{ color: '#991b1b', fontWeight: 600 }}>Latest Infraction:</span>
+            <span style={{ color: '#dc2626', fontWeight: 700 }}>{candidate.latestEvent}</span>
+          </div>
+        )}
       </div>
 
       {/* Action Footer */}

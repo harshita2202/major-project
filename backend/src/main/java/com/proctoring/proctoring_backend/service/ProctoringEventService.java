@@ -79,6 +79,7 @@ public class ProctoringEventService {
         String autoSubmitMessage = null;
         String sessionStatus = "ACTIVE";
         String submissionReason = null;
+        boolean cheatingFlag = false;
 
         if (sessionOpt.isPresent()) {
             ExamSession session = sessionOpt.get();
@@ -94,7 +95,7 @@ public class ProctoringEventService {
 
             session.addRiskPoints(pointsAdded, updatedRiskLevel);
 
-            // Medium-risk warning (50+ points) - Triggered only once per session
+            // Medium-risk warning (50+ points) - Triggered when entering medium tier
             if (updatedRiskScore >= RiskScoringService.MEDIUM_RISK_THRESHOLD && !session.isMediumWarningTriggered()) {
                 mediumWarningTriggered = true;
                 session.setMediumWarningTriggered(true);
@@ -102,15 +103,19 @@ public class ProctoringEventService {
             }
 
             // High-risk auto-submit (80+ points)
-            if (updatedRiskScore >= RiskScoringService.HIGH_RISK_THRESHOLD && !"AUTO_SUBMITTED".equals(session.getStatus())) {
+            if (updatedRiskScore >= RiskScoringService.HIGH_RISK_THRESHOLD) {
                 autoSubmitted = true;
+                cheatingFlag = true;
                 session.autoSubmit(RiskScoringService.REASON_THRESHOLD_REACHED);
+                session.setCheatingFlag(true);
+                session.setRiskLevel("HIGH");
                 autoSubmitMessage = RiskScoringService.AUTO_SUBMIT_MESSAGE;
                 createAutoSubmissionRecord(session);
             }
 
             sessionStatus = session.getStatus();
             submissionReason = session.getSubmissionReason();
+            cheatingFlag = session.isCheatingFlag();
             examSessionRepository.save(session);
         } else {
             if (updatedRiskScore >= RiskScoringService.MEDIUM_RISK_THRESHOLD) {
@@ -119,6 +124,7 @@ public class ProctoringEventService {
             }
             if (updatedRiskScore >= RiskScoringService.HIGH_RISK_THRESHOLD) {
                 autoSubmitted = true;
+                cheatingFlag = true;
                 autoSubmitMessage = RiskScoringService.AUTO_SUBMIT_MESSAGE;
                 sessionStatus = "AUTO_SUBMITTED";
                 submissionReason = RiskScoringService.REASON_THRESHOLD_REACHED;
@@ -175,6 +181,9 @@ public class ProctoringEventService {
 
         // 7. Assemble comprehensive ProctoringEventResponse
         ProctoringEventResponse response = ProctoringEventResponse.fromEntity(event);
+        response.setCandidateName(candidateName);
+        response.setCheatingFlag(cheatingFlag);
+        response.setLatestEvent(eventType);
         response.setPointsAdded(pointsAdded);
         response.setUpdatedRiskScore(updatedRiskScore);
         response.setUpdatedRiskLevel(updatedRiskLevel);
@@ -233,8 +242,9 @@ public class ProctoringEventService {
         candidateRepository.findById(candidateId).ifPresent(candidate -> {
             candidate.setRiskScore(updatedScore);
             candidate.setRisk(updatedLevel.toLowerCase());
-            if (autoSubmitted) {
-                candidate.setStatus("auto-submitted");
+            if (autoSubmitted || updatedScore >= RiskScoringService.HIGH_RISK_THRESHOLD) {
+                candidate.setStatus("AUTO_SUBMITTED");
+                candidate.setCheatingFlag(true);
             }
             candidateRepository.save(candidate);
         });

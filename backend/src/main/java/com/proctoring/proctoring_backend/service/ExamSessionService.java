@@ -7,9 +7,11 @@ import com.proctoring.proctoring_backend.dto.StartSessionRequest;
 import com.proctoring.proctoring_backend.entity.Candidate;
 import com.proctoring.proctoring_backend.entity.Exam;
 import com.proctoring.proctoring_backend.entity.ExamSession;
+import com.proctoring.proctoring_backend.entity.ProctoringEvent;
 import com.proctoring.proctoring_backend.repository.CandidateRepository;
 import com.proctoring.proctoring_backend.repository.ExamRepository;
 import com.proctoring.proctoring_backend.repository.ExamSessionRepository;
+import com.proctoring.proctoring_backend.repository.ProctoringEventRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,13 +30,16 @@ public class ExamSessionService {
     private final ExamSessionRepository examSessionRepository;
     private final ExamRepository examRepository;
     private final CandidateRepository candidateRepository;
+    private final ProctoringEventRepository proctoringEventRepository;
 
     public ExamSessionService(ExamSessionRepository examSessionRepository,
                               ExamRepository examRepository,
-                              CandidateRepository candidateRepository) {
+                              CandidateRepository candidateRepository,
+                              ProctoringEventRepository proctoringEventRepository) {
         this.examSessionRepository = examSessionRepository;
         this.examRepository = examRepository;
         this.candidateRepository = candidateRepository;
+        this.proctoringEventRepository = proctoringEventRepository;
     }
 
     @Transactional
@@ -149,6 +154,13 @@ public class ExamSessionService {
                     .map(Candidate::getAvatar)
                     .orElse("https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop&crop=faces");
 
+            String latestEventType = proctoringEventRepository
+                    .findFirstBySessionIdOrderByTimestampDesc(session.getId())
+                    .map(ProctoringEvent::getEventType)
+                    .orElse("NONE");
+
+            boolean isCheating = session.isCheatingFlag() || session.getRiskScore() >= 80 || "AUTO_SUBMITTED".equalsIgnoreCase(session.getStatus());
+
             CandidateRiskSummary summary = new CandidateRiskSummary(
                     session.getId(),
                     session.getCandidateId(),
@@ -159,6 +171,8 @@ public class ExamSessionService {
                     session.getRiskLevel(),
                     session.getStatus(),
                     session.getSubmissionReason(),
+                    isCheating,
+                    latestEventType,
                     session.getViolationCount(),
                     session.getLastActiveTime()
             );

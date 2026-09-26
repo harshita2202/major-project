@@ -100,6 +100,9 @@ function normalizeCandidate(c) {
     student: studentName,
     avatar: c.avatar || studentName.slice(0, 2).toUpperCase(),
     risk: riskFormatted,
+    riskScore: c.riskScore ?? 0,
+    cheatingFlag: Boolean(c.cheatingFlag),
+    latestEvent: c.latestEvent || null,
     checks,
     timeline
   };
@@ -259,6 +262,23 @@ export async function getActiveCandidates() {
   });
 
   return Array.from(candidateMap.values());
+}
+
+/**
+ * Examiner Live Risk API: GET /api/examiner/live-risk
+ */
+export async function getLiveRiskDashboard(examId) {
+  try {
+    const url = examId
+      ? `${API_BASE_URL}/api/examiner/live-risk?examId=${encodeURIComponent(examId)}`
+      : `${API_BASE_URL}/api/examiner/live-risk`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Failed to fetch live risk dashboard');
+    return res.json();
+  } catch (err) {
+    console.warn('Live risk dashboard fallback:', err);
+    return { highRisk: [], mediumRisk: [], lowRisk: [], totalCandidates: 0, activeCount: 0, autoSubmittedCount: 0 };
+  }
 }
 
 /**

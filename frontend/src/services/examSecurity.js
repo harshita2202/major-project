@@ -24,6 +24,10 @@ export const SECURITY_EVENT_TYPE = {
   KEYBOARD_SHORTCUT: 'SHORTCUT_ATTEMPT', // alias for backwards compatibility
   CONTEXT_MENU_ATTEMPT: 'CONTEXT_MENU_ATTEMPT',
 
+  GAZE_WARNING: 'GAZE_WARNING',
+  NETWORK_DISCONNECTION: 'NETWORK_DISCONNECTION',
+  LONG_INACTIVITY: 'LONG_INACTIVITY',
+
   PAGE_EXIT_ATTEMPT: 'PAGE_EXIT_ATTEMPT',
 };
 
@@ -124,18 +128,32 @@ export function isFullscreen() {
   );
 }
 
-// ─── Security Listeners Engine ─────────────────────────────────────────────────
+// ─── Security Listeners Engine (with Deduplication / Debouncing) ───────────────
 /**
  * Sets up all exam deterrence and security event listeners.
+ * Employs cooldown timestamps to prevent 1 physical action from creating multiple duplicate events.
  *
  * @param {function} onEvent - Callback receiving security event objects
  * @returns {function} cleanup - Call to tear down all active event listeners
  */
 export function setupSecurityListeners(onEvent) {
+  // Timestamps to prevent duplicate rapid firing across blur/visibilitychange/keydown/etc.
+  const lastEventTimestamps = {};
+
+  const emitWithCooldown = (event, cooldownMs = 1200) => {
+    const now = Date.now();
+    const last = lastEventTimestamps[event.type] || 0;
+    if (now - last < cooldownMs) {
+      return; // Skip duplicate / bounced event
+    }
+    lastEventTimestamps[event.type] = now;
+    onEvent(event);
+  };
+
   // 1. Clipboard Copy
   const handleCopy = (e) => {
     e.preventDefault();
-    onEvent(
+    emitWithCooldown(
       createSecurityEvent(
         SECURITY_EVENT_TYPE.COPY_ATTEMPT,
         SECURITY_SEVERITY.MEDIUM,
@@ -147,7 +165,7 @@ export function setupSecurityListeners(onEvent) {
   // 2. Clipboard Cut
   const handleCut = (e) => {
     e.preventDefault();
-    onEvent(
+    emitWithCooldown(
       createSecurityEvent(
         SECURITY_EVENT_TYPE.CUT_ATTEMPT,
         SECURITY_SEVERITY.MEDIUM,
@@ -159,7 +177,7 @@ export function setupSecurityListeners(onEvent) {
   // 3. Clipboard Paste
   const handlePaste = (e) => {
     e.preventDefault();
-    onEvent(
+    emitWithCooldown(
       createSecurityEvent(
         SECURITY_EVENT_TYPE.PASTE_ATTEMPT,
         SECURITY_SEVERITY.MEDIUM,
@@ -171,7 +189,7 @@ export function setupSecurityListeners(onEvent) {
   // 4. Context Menu (Right Click)
   const handleContextMenu = (e) => {
     e.preventDefault();
-    onEvent(
+    emitWithCooldown(
       createSecurityEvent(
         SECURITY_EVENT_TYPE.CONTEXT_MENU_ATTEMPT,
         SECURITY_SEVERITY.LOW,
@@ -194,7 +212,7 @@ export function setupSecurityListeners(onEvent) {
 
     if (matched) {
       e.preventDefault();
-      onEvent(
+      emitWithCooldown(
         createSecurityEvent(
           SECURITY_EVENT_TYPE.SHORTCUT_ATTEMPT,
           SECURITY_SEVERITY.MEDIUM,
@@ -207,7 +225,7 @@ export function setupSecurityListeners(onEvent) {
   // 6. Tab Switch (Page Visibility API)
   const handleVisibilityChange = () => {
     if (document.hidden) {
-      onEvent(
+      emitWithCooldown(
         createSecurityEvent(
           SECURITY_EVENT_TYPE.TAB_SWITCH,
           SECURITY_SEVERITY.HIGH,
@@ -217,21 +235,24 @@ export function setupSecurityListeners(onEvent) {
     }
   };
 
-  // 7. Window Blur (e.g. clicking taskbar, second screen, or another app)
+  // 7. Window Blur (only fires if visibilitychange hasn't already fired within cooldown)
   const handleWindowBlur = () => {
-    onEvent(
-      createSecurityEvent(
-        SECURITY_EVENT_TYPE.TAB_SWITCH,
-        SECURITY_SEVERITY.HIGH,
-        'Examination window lost system focus'
-      )
-    );
+    // If document is already hidden, visibilitychange already handled it
+    if (!document.hidden) {
+      emitWithCooldown(
+        createSecurityEvent(
+          SECURITY_EVENT_TYPE.TAB_SWITCH,
+          SECURITY_SEVERITY.HIGH,
+          'Examination window lost system focus'
+        )
+      );
+    }
   };
 
   // 8. Fullscreen Change
   const handleFullscreenChange = () => {
     if (!isFullscreen()) {
-      onEvent(
+      emitWithCooldown(
         createSecurityEvent(
           SECURITY_EVENT_TYPE.FULLSCREEN_EXIT,
           SECURITY_SEVERITY.HIGH,
@@ -239,19 +260,20 @@ export function setupSecurityListeners(onEvent) {
         )
       );
     } else {
-      onEvent(
+      emitWithCooldown(
         createSecurityEvent(
           SECURITY_EVENT_TYPE.FULLSCREEN_ENTER,
           SECURITY_SEVERITY.INFO,
           'Candidate returned to fullscreen mode'
-        )
+        ),
+        800
       );
     }
   };
 
   // 9. Before Unload Warning
   const handleBeforeUnload = (e) => {
-    onEvent(
+    emitWithCooldown(
       createSecurityEvent(
         SECURITY_EVENT_TYPE.PAGE_EXIT_ATTEMPT,
         SECURITY_SEVERITY.HIGH,
@@ -376,8 +398,8 @@ export function loadSession(examId) {
     return raw ? JSON.parse(raw) : null;
   } catch (lsErr) {
     void lsErr;
-    return null;
   }
+  return null;
 }
 
 export function clearSession(examId) {

@@ -234,7 +234,26 @@ export default function ActiveCandidates({ candidates = [], onMonitorCandidate }
 
                   {/* Status Badge */}
                   <td>
-                    <StatusBadge status={c.status} size="sm" />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-start' }}>
+                      <StatusBadge status={c.status} size="sm" />
+                      {c.cheatingFlag && (
+                        <span
+                          style={{
+                            fontSize: '9.5px',
+                            fontWeight: 800,
+                            backgroundColor: '#fee2e2',
+                            color: '#dc2626',
+                            border: '1px solid #fca5a5',
+                            borderRadius: '3px',
+                            padding: '1px 5px',
+                            letterSpacing: '0.03em',
+                            textTransform: 'uppercase',
+                          }}
+                        >
+                          Cheating Flagged
+                        </span>
+                      )}
+                    </div>
                   </td>
 
                   {/* Action button */}

@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
 
 @RestController
 @RequestMapping("/api/candidates")
@@ -56,7 +57,7 @@ public class CandidateController {
      * Creates or updates the candidate with active status and starts an exam session.
      */
     @PostMapping("/start-attempt")
-    public ResponseEntity<Candidate> startAttempt(@RequestBody Map<String, Object> payload) {
+    public ResponseEntity<Map<String, Object>> startAttempt(@RequestBody Map<String, Object> payload) {
         String examId = (String) payload.getOrDefault("examId", "exam-1");
         String studentId = (String) payload.getOrDefault("studentId", "STU001");
         String studentName = (String) payload.getOrDefault("studentName", "Student");
@@ -98,6 +99,7 @@ public class CandidateController {
         candidate.setStatus("active");
         candidate.setRisk("low");
         candidate.setRiskScore(0);
+        candidate.setCheatingFlag(false);
         if (candidate.getChecksJson() == null || candidate.getChecksJson().isEmpty()) {
             candidate.setChecksJson("{\"faceDetection\":\"passed\",\"audioLevel\":\"normal\",\"tabSwitches\":0,\"gazeTracking\":\"focused\"}");
         }
@@ -107,14 +109,35 @@ public class CandidateController {
 
         Candidate saved = candidateRepository.save(candidate);
 
+        String sessionId = null;
         try {
             StartSessionRequest sessionReq = new StartSessionRequest(examId, studentId, studentName, timeRemaining);
-            examSessionService.startSession(sessionReq);
+            com.proctoring.proctoring_backend.dto.SessionResponse sessionResp = examSessionService.startSession(sessionReq);
+            if (sessionResp != null) {
+                sessionId = sessionResp.getId();
+            }
         } catch (Exception ex) {
             System.err.println("Note: Sync exam session start: " + ex.getMessage());
         }
 
-        return ResponseEntity.ok(saved);
+        Map<String, Object> respMap = new HashMap<>();
+        respMap.put("id", saved.getId());
+        respMap.put("candidate", saved.getCandidate());
+        respMap.put("avatar", saved.getAvatar());
+        respMap.put("email", saved.getEmail());
+        respMap.put("exam", saved.getExam());
+        respMap.put("timeRemaining", saved.getTimeRemaining());
+        respMap.put("totalDuration", saved.getTotalDuration());
+        respMap.put("progress", saved.getProgress());
+        respMap.put("status", saved.getStatus());
+        respMap.put("risk", saved.getRisk());
+        respMap.put("riskScore", saved.getRiskScore());
+        respMap.put("cheatingFlag", saved.getCheatingFlag());
+        respMap.put("checksJson", saved.getChecksJson());
+        respMap.put("timelineJson", saved.getTimelineJson());
+        respMap.put("sessionId", sessionId);
+
+        return ResponseEntity.ok(respMap);
     }
 
     /**

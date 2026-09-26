@@ -19,10 +19,9 @@ import {
 import ExamTimer from '../components/exam/ExamTimer';
 import QuestionCard from '../components/exam/QuestionCard';
 import QuestionNavigator from '../components/exam/QuestionNavigator';
-import SecurityStatus from '../components/exam/SecurityStatus';
-import SecurityActivity from '../components/exam/SecurityActivity';
 import SecurityViolationModal from '../components/exam/SecurityViolationModal';
 import CameraPreview from '../components/exam/CameraPreview';
+import { subscribeToSessionEvents } from '../services/websocket';
 
 import {
   MOCK_QUESTIONS,
@@ -155,6 +154,7 @@ export default function StudentExam() {
     const existing = loadSession(examId);
     if (existing && existing.phase === 'ACTIVE') {
       return {
+        sessionId: existing.sessionId || null,
         phase: PHASE.ACTIVE,
         answers: existing.answers || {},
         currentIndex: existing.currentQuestion || 0,
@@ -177,6 +177,7 @@ export default function StudentExam() {
     }
     if (existing && existing.phase === 'SUBMITTED') {
       return {
+        sessionId: existing.sessionId || null,
         phase: PHASE.SUBMITTED,
         answers: existing.answers || {},
         currentIndex: 0,
@@ -193,6 +194,7 @@ export default function StudentExam() {
       };
     }
     return {
+      sessionId: null,
       phase: PHASE.INSTRUCTIONS,
       answers: {},
       currentIndex: 0,
@@ -208,6 +210,7 @@ export default function StudentExam() {
   };
 
   const [init] = useState(initSession);
+  const [sessionId, setSessionId] = useState(init.sessionId || null);
   const [phase, setPhase] = useState(init.phase);
   const [instructionsAcknowledged, setInstructionsAcknowledged] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(init.currentIndex);
@@ -215,6 +218,8 @@ export default function StudentExam() {
   const [timeRemaining, setTimeRemaining] = useState(init.timeRemaining);
   const [isTimerRunning, setIsTimerRunning] = useState(init.isTimerRunning);
   const [securityEvents, setSecurityEvents] = useState(init.securityEvents);
+  const [activeWarningMessage, setActiveWarningMessage] = useState('');
+  const [isMediumWarning, setIsMediumWarning] = useState(false);
   const [showViolationModal, setShowViolationModal] = useState(
     () => init.phase === PHASE.ACTIVE && !isFullscreen()
   );
@@ -237,6 +242,7 @@ export default function StudentExam() {
   // Reset exam attempt
   const handleResetExam = () => {
     clearSession(examId);
+    setSessionId(null);
     setAnswers({});
     setCurrentIndex(0);
     setSecurityEvents([]);
@@ -247,6 +253,8 @@ export default function StudentExam() {
     setSubmittedAt(null);
     setAutoSubmitted(false);
     setAutoTerminated(false);
+    setActiveWarningMessage('');
+    setIsMediumWarning(false);
     setTerminationReason('');
     setTabSwitchWarnings(0);
     setFullscreenExitsCount(0);
@@ -267,6 +275,9 @@ export default function StudentExam() {
 
   const securityEventsRef = useRef(securityEvents);
   useEffect(() => { securityEventsRef.current = securityEvents; }, [securityEvents]);
+
+  const sessionIdRef = useRef(sessionId);
+  useEffect(() => { sessionIdRef.current = sessionId; }, [sessionId]);
 
   // ── Auto-Termination Handler ───────────────────────────────────────────────
   const handleAutoTerminate = useCallback((reason) => {
@@ -297,6 +308,7 @@ export default function StudentExam() {
     }
 
     saveSession(examId, {
+      sessionId: sessionIdRef.current,
       phase: 'SUBMITTED',
       answers: answersRef.current,
       securityEvents: finalEvents,
@@ -313,7 +325,7 @@ export default function StudentExam() {
       score: calculated.score,
       correctCount: calculated.correctCount,
       totalQuestions: questionsRef.current.length,
-      status: 'terminated',
+      status: 'AUTO_SUBMITTED',
       terminationReason: reason,
     }).catch((err) => void err);
 
@@ -322,58 +334,95 @@ export default function StudentExam() {
     exitFullscreen();
   }, [examId, examMeta.candidateId, examMeta.candidateName]);
 
-  // ── Security Event Handler ─────────────────────────────────────────────────
+  // ── Security Event Handler (Reporting to Centralized Backend) ──────────────
   const handleSecurityEvent = useCallback((event) => {
     if (phaseRef.current !== PHASE.ACTIVE) return;
 
     setSecurityEvents((prev) => {
       const updated = [...prev, event];
-      // Persist to localStorage
       const session = loadSession(examId);
       if (session) saveSession(examId, { ...session, securityEvents: updated });
       return updated;
     });
 
-    // Handle specific event types and check auto-termination thresholds
     if (event.type === SECURITY_EVENT_TYPE.FULLSCREEN_EXIT) {
-      setFullscreenExitsCount((prev) => {
-        const next = prev + 1;
-        if (next >= MAX_FULLSCREEN_EXITS) {
-          handleAutoTerminate(`Exceeded maximum allowed fullscreen exit infractions (${next}/${MAX_FULLSCREEN_EXITS})`);
-        } else {
-          setActiveViolationType('FULLSCREEN_EXIT');
-          setShowViolationModal(true);
-        }
-        return next;
-      });
+      setFullscreenExitsCount((prev) => prev + 1);
     }
-
     if (event.type === SECURITY_EVENT_TYPE.TAB_SWITCH) {
-      setTabSwitchWarnings((prev) => {
-        const next = prev + 1;
-        if (next >= MAX_TAB_SWITCHES) {
-          handleAutoTerminate(`Exceeded maximum allowed tab switch infractions (${next}/${MAX_TAB_SWITCHES})`);
-        } else {
-          setActiveViolationType('TAB_SWITCH');
-          setShowViolationModal(true);
-        }
-        return next;
-      });
+      setTabSwitchWarnings((prev) => prev + 1);
     }
 
-    // Stream event to backend for live invigilator monitoring
+    // Stream event to backend for centralized risk scoring, database persistence & live broadcasting
     recordExamEvent(examId, {
-      studentId: examMeta.candidateId || 'STU001',
-      studentName: examMeta.candidateName || 'Alex Morgan',
+      sessionId: sessionIdRef.current,
+      studentId: examMeta.candidateId || currentUser?.userId || 'STU001',
+      studentName: examMeta.candidateName || currentUser?.name || 'Alex Morgan',
       type: event.type,
       severity: event.severity,
       message: event.message
     }).then((res) => {
-      if (res && res.autoSubmitted) {
-        handleAutoTerminate(res.autoSubmitMessage || 'ProctorAI high-risk behavioral anomaly threshold exceeded');
+      if (!res) return;
+
+      if (res.sessionId && !sessionIdRef.current) {
+        setSessionId(res.sessionId);
       }
-    }).catch((err) => void err);
-  }, [examId, MAX_TAB_SWITCHES, MAX_FULLSCREEN_EXITS, examMeta.candidateId, examMeta.candidateName, handleAutoTerminate]);
+
+      // Check auto-submitted threshold (score >= 80)
+      if (res.autoSubmitted) {
+        handleAutoTerminate(
+          res.autoSubmitMessage ||
+          'Your exam has been automatically submitted because the proctoring risk threshold was reached.'
+        );
+        return;
+      }
+
+      // Check medium risk warning threshold (score >= 50)
+      if (res.mediumWarningTriggered && res.mediumWarningMessage) {
+        setActiveWarningMessage(res.mediumWarningMessage);
+        setIsMediumWarning(true);
+        setActiveViolationType(event.type);
+        setShowViolationModal(true);
+        return;
+      }
+
+      // Feature-specific warning returned from backend
+      if (res.warningMessage) {
+        setActiveWarningMessage(res.warningMessage);
+        setIsMediumWarning(false);
+        setActiveViolationType(event.type);
+        setShowViolationModal(true);
+      } else if (event.type === SECURITY_EVENT_TYPE.FULLSCREEN_EXIT) {
+        setActiveWarningMessage('Do not exit fullscreen. Repeated violations may result in automatic exam submission.');
+        setIsMediumWarning(false);
+        setActiveViolationType('FULLSCREEN_EXIT');
+        setShowViolationModal(true);
+      }
+    }).catch((err) => {
+      console.warn('Backend event evaluation notice:', err);
+      if (event.type === SECURITY_EVENT_TYPE.FULLSCREEN_EXIT) {
+        setActiveWarningMessage('Do not exit fullscreen. Repeated violations may result in automatic exam submission.');
+        setIsMediumWarning(false);
+        setActiveViolationType('FULLSCREEN_EXIT');
+        setShowViolationModal(true);
+      }
+    });
+  }, [examId, examMeta.candidateId, examMeta.candidateName, currentUser?.userId, currentUser?.name, handleAutoTerminate]);
+
+  // ── WebSocket live session listener (for instant auto-submit from backend) ──
+  useEffect(() => {
+    if (phase !== PHASE.ACTIVE || !sessionId) return;
+    const unsubscribe = subscribeToSessionEvents(sessionId, (data) => {
+      if (data && data.autoSubmitted) {
+        handleAutoTerminate(
+          data.autoSubmitMessage ||
+          'Your exam has been automatically submitted because the proctoring risk threshold was reached.'
+        );
+      }
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [phase, sessionId, handleAutoTerminate]);
 
   // ── Security listeners lifecycle ───────────────────────────────────────────
   const cleanupListenersRef = useRef(null);
@@ -487,8 +536,35 @@ export default function StudentExam() {
       SECURITY_SEVERITY.INFO,
       'Examination session started'
     );
-    setSecurityEvents([startedEvent]);
+    const sHours = Math.floor(INITIAL_SECONDS / 3600);
+    const sMins = Math.floor((INITIAL_SECONDS % 3600) / 60);
+    const sSecs = INITIAL_SECONDS % 60;
+    const durFormatted = `${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:${String(sSecs).padStart(2, '0')}`;
+
+    let startedSessionId = null;
+    try {
+      const attemptRes = await startExamAttempt({
+        examId,
+        studentId: examMeta.candidateId || currentUser?.userId || 'STU001',
+        studentName: examMeta.candidateName || currentUser?.name || 'Alex Johnson',
+        email: currentUser?.email || `${(examMeta.candidateId || 'stu001').toLowerCase()}@university.edu`,
+        examTitle: examMeta.name || examMeta.title || `Exam ${examId}`,
+        timeRemainingSeconds: INITIAL_SECONDS,
+        totalDurationSeconds: INITIAL_SECONDS,
+        timeRemainingFormatted: durFormatted,
+        totalDurationFormatted: durFormatted,
+      });
+
+      if (attemptRes && attemptRes.sessionId) {
+        startedSessionId = attemptRes.sessionId;
+        setSessionId(startedSessionId);
+      }
+    } catch (err) {
+      console.warn('startExamAttempt sync:', err);
+    }
+
     saveSession(examId, {
+      sessionId: startedSessionId,
       phase: 'ACTIVE',
       answers: {},
       currentQuestion: 0,
@@ -500,23 +576,6 @@ export default function StudentExam() {
     });
     setPhase(PHASE.ACTIVE);
     setIsTimerRunning(true);
-
-    const sHours = Math.floor(INITIAL_SECONDS / 3600);
-    const sMins = Math.floor((INITIAL_SECONDS % 3600) / 60);
-    const sSecs = INITIAL_SECONDS % 60;
-    const durFormatted = `${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:${String(sSecs).padStart(2, '0')}`;
-
-    startExamAttempt({
-      examId,
-      studentId: examMeta.candidateId || currentUser?.userId || 'STU001',
-      studentName: examMeta.candidateName || currentUser?.name || 'Alex Johnson',
-      email: currentUser?.email || `${(examMeta.candidateId || 'stu001').toLowerCase()}@university.edu`,
-      examTitle: examMeta.name || examMeta.title || `Exam ${examId}`,
-      timeRemainingSeconds: INITIAL_SECONDS,
-      totalDurationSeconds: INITIAL_SECONDS,
-      timeRemainingFormatted: durFormatted,
-      totalDurationFormatted: durFormatted,
-    }).catch((err) => void err);
   };
 
   // ── Return to fullscreen after violation ───────────────────────────────────
@@ -1131,6 +1190,8 @@ export default function StudentExam() {
       <SecurityViolationModal
         isVisible={showViolationModal}
         violationType={activeViolationType}
+        warningMessage={activeWarningMessage}
+        isMediumWarning={isMediumWarning}
         fullscreenExits={fullscreenExitsCount}
         tabSwitches={tabSwitchWarnings}
         maxTabSwitches={MAX_TAB_SWITCHES}
@@ -1138,6 +1199,7 @@ export default function StudentExam() {
         isTerminated={autoTerminated}
         terminationReason={terminationReason}
         onReturnToFullscreen={handleReturnToFullscreen}
+        onClose={() => setShowViolationModal(false)}
         onAcknowledgeTermination={() => {
           setShowViolationModal(false);
           setPhase(PHASE.SUBMITTED);
@@ -1261,7 +1323,7 @@ export default function StudentExam() {
             />
           </div>
 
-          {/* Right: security pill + submit */}
+          {/* Right: status pill + submit */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
             <div
               style={{
@@ -1272,21 +1334,9 @@ export default function StudentExam() {
                 borderRadius: '9999px',
                 fontSize: '11.5px',
                 fontWeight: 700,
-                backgroundColor:
-                  secStatus === 'SECURE'
-                    ? 'rgba(22, 163, 74, 0.2)'
-                    : secStatus === 'WARNING'
-                    ? 'rgba(217, 119, 6, 0.25)'
-                    : 'rgba(185, 28, 28, 0.25)',
-                color:
-                  secStatus === 'SECURE' ? '#4ade80' : secStatus === 'WARNING' ? '#fcd34d' : '#f87171',
-                border: '1px solid',
-                borderColor:
-                  secStatus === 'SECURE'
-                    ? 'rgba(74, 222, 128, 0.3)'
-                    : secStatus === 'WARNING'
-                    ? 'rgba(252, 211, 77, 0.3)'
-                    : 'rgba(248, 113, 113, 0.3)',
+                backgroundColor: 'rgba(38, 198, 218, 0.15)',
+                color: '#26c6da',
+                border: '1px solid rgba(38, 198, 218, 0.3)',
               }}
             >
               <span
@@ -1294,11 +1344,11 @@ export default function StudentExam() {
                   width: '6px',
                   height: '6px',
                   borderRadius: '50%',
-                  backgroundColor: 'currentColor',
+                  backgroundColor: '#26c6da',
                   display: 'inline-block',
                 }}
               />
-              {secStatus === 'SECURE' ? 'Secure' : secStatus === 'WARNING' ? 'Warning' : 'High Risk'}
+              Active Session
             </div>
 
             <button
@@ -1392,6 +1442,7 @@ export default function StudentExam() {
 
           {/* RIGHT: Sidebar panels */}
           <aside style={styles.sidePanel}>
+            <CameraPreview candidateName={examMeta.candidateName} isActive={phase === PHASE.ACTIVE} />
             <QuestionNavigator
               totalQuestions={questions.length}
               currentIndex={currentIndex}
@@ -1399,9 +1450,6 @@ export default function StudentExam() {
               questions={questions}
               onNavigate={goToQuestion}
             />
-            <SecurityStatus status={secStatus} counts={violations} />
-            <SecurityActivity events={securityEvents} />
-            <CameraPreview candidateName={examMeta.candidateName} isActive={phase === PHASE.ACTIVE} />
           </aside>
         </div>
       </div>

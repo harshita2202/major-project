@@ -112,6 +112,32 @@ export default function CandidateDetailModal({ candidate, isOpen, onClose }) {
                 {candidate.progress}% completed
               </div>
             </div>
+
+            <div>
+              <span style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>
+                Cheating Status
+              </span>
+              <div style={{ marginTop: '4px' }}>
+                {candidate.cheatingFlag ? (
+                  <span style={{ fontSize: '11px', fontWeight: 800, backgroundColor: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: '4px', padding: '2px 8px' }}>
+                    FLAGGED
+                  </span>
+                ) : (
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#059669' }}>
+                    CLEAN
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <span style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>
+                Latest Infraction
+              </span>
+              <div style={{ fontSize: '12.5px', fontWeight: 700, color: candidate.latestEvent ? '#dc2626' : '#64748b', marginTop: '4px' }}>
+                {candidate.latestEvent || 'None'}
+              </div>
+            </div>
           </div>
         </div>
 

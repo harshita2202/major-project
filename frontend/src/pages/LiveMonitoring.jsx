@@ -6,6 +6,7 @@ import SearchBar from '../components/common/SearchBar';
 import EmptyState from '../components/common/EmptyState';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import { getActiveCandidates } from '../services/api';
+import { subscribeToExaminerRiskUpdates } from '../services/websocket';
 
 export default function LiveMonitoring() {
   const [candidates, setCandidates] = useState([]);
@@ -30,6 +31,58 @@ export default function LiveMonitoring() {
     fetchCandidates();
     // Auto-refresh every 3 seconds to reflect newly started or completed student attempts in real-time
     const interval = setInterval(fetchCandidates, 3000);
+
+    // Real-time WebSocket updates from backend examiner risk topic
+    const unsubscribeWs = subscribeToExaminerRiskUpdates((update) => {
+      if (!update) return;
+      setCandidates((prev) => {
+        const idx = prev.findIndex(
+          (c) =>
+            (update.candidateId && (c.id === update.candidateId || c.studentId === update.candidateId)) ||
+            (update.sessionId && (c.sessionId === update.sessionId || c.id === update.sessionId)) ||
+            (update.candidateName && c.candidate === update.candidateName)
+        );
+
+        const rawRisk = update.updatedRiskLevel || 'LOW';
+        const formattedRisk = rawRisk.charAt(0).toUpperCase() + rawRisk.slice(1).toLowerCase();
+
+        if (idx !== -1) {
+          const updatedList = [...prev];
+          const c = updatedList[idx];
+          const newStatus = update.autoSubmitted ? 'auto_submitted' : c.status;
+          const newEvent = update.latestEvent || update.eventType || 'Security Event';
+
+          updatedList[idx] = {
+            ...c,
+            risk: formattedRisk,
+            riskScore: update.updatedRiskScore !== undefined ? update.updatedRiskScore : c.riskScore,
+            cheatingFlag: update.cheatingFlag !== undefined ? update.cheatingFlag : c.cheatingFlag,
+            latestEvent: newEvent,
+            status: newStatus,
+            checks: {
+              ...(c.checks || {}),
+              tabSwitch: (update.eventType === 'TAB_SWITCH' || update.eventType === 'TAB_SWITCH_ATTEMPT')
+                ? ((c.checks?.tabSwitch || 0) + 1)
+                : (c.checks?.tabSwitch || 0)
+            },
+            timeline: [
+              {
+                time: new Date().toLocaleTimeString(),
+                event: `${newEvent} (+${update.eventPoints || 0} pts, total: ${update.updatedRiskScore})`,
+                type: rawRisk === 'HIGH' ? 'danger' : 'warning'
+              },
+              ...(c.timeline || [])
+            ]
+          };
+          return updatedList;
+        } else {
+          // New candidate or session not in list yet -> trigger refetch
+          fetchCandidates();
+          return prev;
+        }
+      });
+    });
+
     const handleFocus = () => fetchCandidates();
     const handleStorage = (e) => {
       if (e.key === 'proctor_active_attempts') fetchCandidates();
@@ -40,6 +93,7 @@ export default function LiveMonitoring() {
 
     return () => {
       clearInterval(interval);
+      if (typeof unsubscribeWs === 'function') unsubscribeWs();
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('storage', handleStorage);
     };

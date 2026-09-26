@@ -13,6 +13,8 @@ public class CandidateRiskSummary {
     private String riskLevel; // "HIGH", "MEDIUM", "LOW"
     private String status; // "ACTIVE", "AUTO_SUBMITTED", "COMPLETED"
     private String submissionReason;
+    private boolean cheatingFlag;
+    private String latestEvent;
     private int violationCount;
     private LocalDateTime lastActiveTime;
 
@@ -20,7 +22,8 @@ public class CandidateRiskSummary {
 
     public CandidateRiskSummary(String sessionId, String candidateId, String candidateName,
                                 String avatar, String examId, int riskScore, String riskLevel,
-                                String status, String submissionReason, int violationCount,
+                                String status, String submissionReason, boolean cheatingFlag,
+                                String latestEvent, int violationCount,
                                 LocalDateTime lastActiveTime) {
         this.sessionId = sessionId;
         this.candidateId = candidateId;
@@ -31,6 +34,8 @@ public class CandidateRiskSummary {
         this.riskLevel = riskLevel;
         this.status = status;
         this.submissionReason = submissionReason;
+        this.cheatingFlag = cheatingFlag;
+        this.latestEvent = latestEvent;
         this.violationCount = violationCount;
         this.lastActiveTime = lastActiveTime;
     }
@@ -61,6 +66,12 @@ public class CandidateRiskSummary {
 
     public String getSubmissionReason() { return submissionReason; }
     public void setSubmissionReason(String submissionReason) { this.submissionReason = submissionReason; }
+
+    public boolean isCheatingFlag() { return cheatingFlag; }
+    public void setCheatingFlag(boolean cheatingFlag) { this.cheatingFlag = cheatingFlag; }
+
+    public String getLatestEvent() { return latestEvent; }
+    public void setLatestEvent(String latestEvent) { this.latestEvent = latestEvent; }
 
     public int getViolationCount() { return violationCount; }
     public void setViolationCount(int violationCount) { this.violationCount = violationCount; }

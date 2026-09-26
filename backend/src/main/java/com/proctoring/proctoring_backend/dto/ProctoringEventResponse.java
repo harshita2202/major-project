@@ -9,6 +9,7 @@ public class ProctoringEventResponse {
     private String sessionId;
     private String examId;
     private String candidateId;
+    private String candidateName;
     private String eventType;
     private String severity;
     private String details;
@@ -28,8 +29,10 @@ public class ProctoringEventResponse {
     // High-Risk (80+) Auto-submission alert
     private boolean autoSubmitted;
     private String autoSubmitMessage;
+    private boolean cheatingFlag;
     private String sessionStatus;
     private String submissionReason;
+    private String latestEvent;
 
     public ProctoringEventResponse() {}
 
@@ -49,6 +52,7 @@ public class ProctoringEventResponse {
         resp.setUpdatedRiskScore(event.getUpdatedRiskScore());
         resp.setUpdatedRiskLevel(event.getUpdatedRiskLevel());
         resp.setWarningMessage(event.getWarningMessage());
+        resp.setLatestEvent(event.getEventType());
         return resp;
     }
 
@@ -63,6 +67,9 @@ public class ProctoringEventResponse {
 
     public String getCandidateId() { return candidateId; }
     public void setCandidateId(String candidateId) { this.candidateId = candidateId; }
+
+    public String getCandidateName() { return candidateName; }
+    public void setCandidateName(String candidateName) { this.candidateName = candidateName; }
 
     public String getEventType() { return eventType; }
     public void setEventType(String eventType) { this.eventType = eventType; }
@@ -103,9 +110,15 @@ public class ProctoringEventResponse {
     public String getAutoSubmitMessage() { return autoSubmitMessage; }
     public void setAutoSubmitMessage(String autoSubmitMessage) { this.autoSubmitMessage = autoSubmitMessage; }
 
+    public boolean isCheatingFlag() { return cheatingFlag; }
+    public void setCheatingFlag(boolean cheatingFlag) { this.cheatingFlag = cheatingFlag; }
+
     public String getSessionStatus() { return sessionStatus; }
     public void setSessionStatus(String sessionStatus) { this.sessionStatus = sessionStatus; }
 
     public String getSubmissionReason() { return submissionReason; }
     public void setSubmissionReason(String submissionReason) { this.submissionReason = submissionReason; }
+
+    public String getLatestEvent() { return latestEvent; }
+    public void setLatestEvent(String latestEvent) { this.latestEvent = latestEvent; }
 }

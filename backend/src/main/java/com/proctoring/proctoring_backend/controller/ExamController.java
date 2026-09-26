@@ -137,11 +137,15 @@ public class ExamController {
 
     @PostMapping("/{id}/events")
     public ResponseEntity<?> recordSecurityEvent(@PathVariable String id, @RequestBody Map<String, Object> payload) {
-        String studentId = (String) payload.getOrDefault("studentId", "STU001");
-        String studentName = (String) payload.getOrDefault("studentName", "Alex Morgan");
-        String type = (String) payload.getOrDefault("type", "SECURITY_WARNING");
+        String studentId = payload.containsKey("studentId") ? (String) payload.get("studentId")
+                : (String) payload.getOrDefault("candidateId", "STU001");
+        String studentName = payload.containsKey("studentName") ? (String) payload.get("studentName")
+                : (String) payload.getOrDefault("candidateName", "Alex Morgan");
+        String type = payload.containsKey("type") ? (String) payload.get("type")
+                : (String) payload.getOrDefault("eventType", "SECURITY_WARNING");
         String severity = (String) payload.getOrDefault("severity", "medium");
-        String message = (String) payload.getOrDefault("message", "Security event recorded");
+        String message = payload.containsKey("message") ? (String) payload.get("message")
+                : (String) payload.getOrDefault("details", "Security event recorded");
         String sessionId = (String) payload.get("sessionId");
 
         com.proctoring.proctoring_backend.dto.ProctoringEventRequest eventReq =
@@ -157,10 +161,6 @@ public class ExamController {
         com.proctoring.proctoring_backend.dto.ProctoringEventResponse savedEvent =
                 proctoringEventService.recordEvent(eventReq);
 
-        Map<String, Object> response = new HashMap<>();
-        response.put("success", true);
-        response.put("eventId", savedEvent.getId());
-        response.put("sessionId", savedEvent.getSessionId());
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(savedEvent);
     }
 }

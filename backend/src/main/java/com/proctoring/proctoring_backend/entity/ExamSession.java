@@ -49,6 +49,9 @@ public class ExamSession {
     @Column(name = "medium_warning_triggered")
     private Boolean mediumWarningTriggered = false;
 
+    @Column(name = "cheating_flag")
+    private Boolean cheatingFlag = false;
+
     @Column(name = "submission_reason")
     private String submissionReason;
 
@@ -74,6 +77,7 @@ public class ExamSession {
         this.riskLevel = "LOW";
         this.riskScore = 0;
         this.mediumWarningTriggered = false;
+        this.cheatingFlag = false;
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
     }
@@ -88,6 +92,8 @@ public class ExamSession {
 
     public void autoSubmit(String reason) {
         this.status = "AUTO_SUBMITTED";
+        this.riskLevel = "HIGH";
+        this.cheatingFlag = true;
         this.submissionReason = reason;
         this.endTime = LocalDateTime.now();
         this.lastActiveTime = LocalDateTime.now();
@@ -149,6 +155,10 @@ public class ExamSession {
 
     public boolean isMediumWarningTriggered() { return Boolean.TRUE.equals(mediumWarningTriggered); }
     public void setMediumWarningTriggered(Boolean mediumWarningTriggered) { this.mediumWarningTriggered = mediumWarningTriggered; }
+
+    public Boolean getCheatingFlag() { return cheatingFlag; }
+    public boolean isCheatingFlag() { return Boolean.TRUE.equals(cheatingFlag); }
+    public void setCheatingFlag(Boolean cheatingFlag) { this.cheatingFlag = cheatingFlag; }
 
     public String getSubmissionReason() { return submissionReason; }
     public void setSubmissionReason(String submissionReason) { this.submissionReason = submissionReason; }

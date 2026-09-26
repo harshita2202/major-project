@@ -23,6 +23,9 @@ public class Candidate {
     private String risk;
     private int riskScore;
 
+    @Column(name = "cheating_flag")
+    private Boolean cheatingFlag = false;
+
     @Column(length = 3000)
     private String checksJson;
 
@@ -81,6 +84,10 @@ public class Candidate {
 
     public int getRiskScore() { return riskScore; }
     public void setRiskScore(int riskScore) { this.riskScore = riskScore; }
+
+    public Boolean getCheatingFlag() { return cheatingFlag; }
+    public boolean isCheatingFlag() { return Boolean.TRUE.equals(cheatingFlag); }
+    public void setCheatingFlag(Boolean cheatingFlag) { this.cheatingFlag = cheatingFlag; }
 
     public String getChecksJson() { return checksJson; }
     public void setChecksJson(String checksJson) { this.checksJson = checksJson; }
