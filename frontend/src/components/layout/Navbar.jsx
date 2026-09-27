@@ -16,32 +16,32 @@ import { logout } from '../../services/auth';
 
 const ROUTE_META = {
   '/dashboard': {
-    title: 'Operations Center',
-    description: 'ProctorTrack™ Real-Time Telemetry & Session Integrity Index'
+    title: 'Examination Dashboard',
+    description: 'Real-time overview of active sessions and malpractice telemetry'
   },
   '/live-monitoring': {
-    title: 'Live Invigilation (ProctorLive™)',
-    description: 'Multi-stream biometric webcam & screen anomaly supervision'
+    title: 'Live Invigilation',
+    description: 'Real-time multi-student webcam & screen anomaly supervision'
   },
   '/exams': {
     title: 'Exam Management',
-    description: 'Active & scheduled examination sessions across LMS integrations'
+    description: 'Active & scheduled examination sessions across university departments'
   },
   '/students': {
-    title: 'Candidate Directory (ProctorID™)',
-    description: 'Biometric enrollment, government ID scans, and device pre-checks'
+    title: 'Candidate Directory',
+    description: 'Student enrollment, verification status, and examination pre-checks'
   },
   '/violations': {
-    title: 'Incident Audit Registry (PEEP)',
-    description: 'ProctorTrack Exam Electronic Protocol infraction logs and adjudications'
+    title: 'Incident Audit Registry',
+    description: 'Detailed security infractions and incident adjudication logs'
   },
   '/reports': {
     title: 'Integrity Analytics & Reports',
-    description: 'Executive compliance indices, trust metrics, and accredited audit files'
+    description: 'Executive examination reports, integrity metrics, and audit archives'
   },
   '/settings': {
-    title: 'ProctorTrack Configuration',
-    description: 'Automated AI threshold parameters, browser lock, and LMS gradebook sync'
+    title: 'System Settings',
+    description: 'Invigilation thresholds, browser lock rules, and alert parameters'
   }
 };
 
@@ -169,7 +169,7 @@ export default function Navbar({ onOpenMobileSidebar }) {
               }}
               className="navbar-product-tag"
             >
-              Proctortrack Enterprise
+              Academic Portal
             </span>
           </div>
 
@@ -303,7 +303,7 @@ export default function Navbar({ onOpenMobileSidebar }) {
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--pt-navy-800)' }}>
-                    ProctorTrack Incidents
+                    Security Alerts
                   </span>
                   <span
                     style={{
@@ -393,7 +393,7 @@ export default function Navbar({ onOpenMobileSidebar }) {
                 Lead Invigilator
               </div>
               <div style={{ fontSize: '10.5px', color: 'var(--text-secondary)' }}>
-                Verificient Staff
+                University Exam Staff
               </div>
             </div>
             <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} />
@@ -445,7 +445,7 @@ export default function Navbar({ onOpenMobileSidebar }) {
                 onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
                 onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
               >
-                <Shield size={15} color="var(--pt-blue-800)" /> Verificient Credentials
+                <Shield size={15} color="var(--pt-blue-800)" /> Department Credentials
               </div>
               <div
                 style={{

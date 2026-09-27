@@ -1,102 +1,109 @@
 /**
- * Proctortrack™ Enterprise StatCard
- * High-contrast institutional metric indicator with top accent border
+ * StatCard.jsx
+ * Clean, modern metric card for university examination portal.
+ * Focuses on clarity, professional blue/navy accents, and zero visual clutter.
  */
 export default function StatCard({
   title,
   value,
-  trend,
-  isPositive = true,
   icon: Icon,
-  accentColor = 'var(--pt-navy-800)',
-  iconBg = 'var(--pt-blue-50)',
-  subtext = 'vs previous session',
-  borderTopColor = 'var(--pt-blue-600)'
+  accentColor = '#2563eb',
+  iconBg = '#eff6ff',
+  subtext,
+  badgeText,
 }) {
   return (
     <div
       className="card"
       style={{
-        padding: '20px 22px',
+        backgroundColor: '#ffffff',
+        border: '1px solid #e2e8f0',
+        borderRadius: '12px',
+        padding: '18px 20px',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
-        position: 'relative',
-        overflow: 'hidden',
-        borderTop: `3px solid ${borderTopColor}`
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.03)',
+        transition: 'all 0.15s ease',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = '#cbd5e1';
+        e.currentTarget.style.boxShadow = '0 4px 12px rgba(15, 23, 42, 0.05)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = '#e2e8f0';
+        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.03)';
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <div>
-          <span
-            style={{
-              fontSize: '11.5px',
-              fontWeight: 700,
-              color: 'var(--text-secondary)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.06em'
-            }}
-          >
-            {title}
-          </span>
-          <div
-            style={{
-              fontSize: '28px',
-              fontWeight: 800,
-              color: 'var(--pt-navy-900)',
-              marginTop: '4px',
-              letterSpacing: '-0.03em',
-              fontFamily: 'var(--font-family)'
-            }}
-          >
-            {value}
-          </div>
-        </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span
+          style={{
+            fontSize: '13px',
+            fontWeight: 600,
+            color: '#64748b',
+          }}
+        >
+          {title}
+        </span>
 
         <div
           style={{
-            width: '42px',
-            height: '42px',
-            borderRadius: '10px',
+            width: '38px',
+            height: '38px',
+            borderRadius: '9px',
             backgroundColor: iconBg,
             color: accentColor,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             flexShrink: 0,
-            border: '1px solid rgba(15, 43, 72, 0.08)'
           }}
         >
-          {Icon && <Icon size={21} />}
+          {Icon && <Icon size={19} />}
         </div>
       </div>
 
-      <div
-        style={{
-          marginTop: '14px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          fontSize: '12px',
-          fontWeight: 500
-        }}
-      >
-        <span
+      <div style={{ marginTop: '12px' }}>
+        <div
           style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            padding: '2px 8px',
-            borderRadius: '4px',
-            backgroundColor: isPositive ? '#ecfdf5' : '#fff7ed',
-            color: isPositive ? '#047857' : '#c2410c',
-            fontWeight: 700,
-            fontSize: '11px',
-            border: `1px solid ${isPositive ? '#a7f3d0' : '#ffedd5'}`
+            fontSize: '28px',
+            fontWeight: 800,
+            color: '#0f172a',
+            lineHeight: 1.1,
+            letterSpacing: '-0.02em',
           }}
         >
-          {trend}
-        </span>
-        <span style={{ color: 'var(--text-muted)' }}>{subtext}</span>
+          {value}
+        </div>
+
+        {(subtext || badgeText) && (
+          <div
+            style={{
+              marginTop: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '12px',
+              color: '#64748b',
+            }}
+          >
+            {badgeText && (
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  padding: '1px 6px',
+                  borderRadius: '4px',
+                  backgroundColor: '#f1f5f9',
+                  color: '#334155',
+                }}
+              >
+                {badgeText}
+              </span>
+            )}
+            {subtext && <span>{subtext}</span>}
+          </div>
+        )}
       </div>
     </div>
   );

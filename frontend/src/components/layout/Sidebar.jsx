@@ -17,7 +17,7 @@ const NAV_GROUPS = [
   {
     label: 'Live Operations',
     items: [
-      { name: 'Operations Center', path: '/dashboard', icon: LayoutDashboard },
+      { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
       { name: 'Live Invigilation', path: '/live-monitoring', icon: Video, badge: 'Live', badgeType: 'live' }
     ]
   },
@@ -25,20 +25,20 @@ const NAV_GROUPS = [
     label: 'Session Management',
     items: [
       { name: 'Exam Schedules', path: '/exams', icon: BookOpen },
-      { name: 'Candidate Roster', path: '/students', icon: Users, badge: 'ProctorID' }
+      { name: 'Student Roster', path: '/students', icon: Users }
     ]
   },
   {
     label: 'Audit & Compliance',
     items: [
-      { name: 'Incident Logs', path: '/violations', icon: AlertTriangle, badge: '17', badgeType: 'alert' },
+      { name: 'Incident Logs', path: '/violations', icon: AlertTriangle },
       { name: 'Integrity Reports', path: '/reports', icon: FileBarChart2 }
     ]
   },
   {
     label: 'Configuration',
     items: [
-      { name: 'ProctorTrack Settings', path: '/settings', icon: Settings }
+      { name: 'System Settings', path: '/settings', icon: Settings }
     ]
   }
 ];
@@ -137,14 +137,13 @@ export default function Sidebar({ isOpen, onClose }) {
                   gap: '2px'
                 }}
               >
-                <span>Proctor</span>
-                <span style={{ color: '#26c6da' }}>track</span>
-                <span style={{ fontSize: '10px', verticalAlign: 'super', color: '#8eaec9', marginLeft: '1px' }}>™</span>
+                <span>Exam</span>
+                <span style={{ color: '#38bdf8' }}>Proctor</span>
               </div>
               <div
                 style={{
                   fontSize: '10px',
-                  color: '#8eaec9',
+                  color: '#94a3b8',
                   fontWeight: 600,
                   letterSpacing: '0.06em',
                   textTransform: 'uppercase',
@@ -154,8 +153,7 @@ export default function Sidebar({ isOpen, onClose }) {
                   gap: '4px'
                 }}
               >
-                <span>by</span>
-                <span style={{ color: '#ffffff', fontWeight: 700 }}>VERIFICIENT</span>
+                <span>University Portal</span>
               </div>
             </div>
           </div>
@@ -298,10 +296,10 @@ export default function Sidebar({ isOpen, onClose }) {
               />
               <div>
                 <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#ffffff' }}>
-                  Canvas LTI 1.3 Active
+                  System Active & Monitored
                 </div>
                 <div style={{ fontSize: '10px', color: '#8eaec9' }}>
-                  SOC 2 Type II • FERPA Compliant
+                  FERPA & Institutional Compliance
                 </div>
               </div>
             </div>
@@ -321,9 +319,9 @@ export default function Sidebar({ isOpen, onClose }) {
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Headphones size={13} color="#f78d2b" />
-              <span>Proctor Hotline</span>
+              <span>Campus Invigilation Desk</span>
             </div>
-            <span style={{ color: '#ffffff', fontWeight: 600 }}>24/7 Live</span>
+            <span style={{ color: '#ffffff', fontWeight: 600 }}>Active</span>
           </div>
 
           {/* Lead Proctor Profile */}
@@ -352,7 +350,7 @@ export default function Sidebar({ isOpen, onClose }) {
                 fontSize: '12px'
               }}
             >
-              PT
+              LI
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div
@@ -368,7 +366,7 @@ export default function Sidebar({ isOpen, onClose }) {
                 Lead Invigilator
               </div>
               <div style={{ fontSize: '10.5px', color: '#26c6da' }}>
-                Verificient Certified
+                University Exam Office
               </div>
             </div>
           </div>
