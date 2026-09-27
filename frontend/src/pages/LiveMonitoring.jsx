@@ -68,7 +68,7 @@ export default function LiveMonitoring() {
             timeline: [
               {
                 time: new Date().toLocaleTimeString(),
-                event: `${newEvent} (+${update.eventPoints || 0} pts, total: ${update.updatedRiskScore})`,
+                event: `${newEvent} (+${update.pointsAdded ?? update.eventPoints ?? 0} pts, total: ${update.updatedRiskScore})`,
                 type: rawRisk === 'HIGH' ? 'danger' : 'warning'
               },
               ...(c.timeline || [])

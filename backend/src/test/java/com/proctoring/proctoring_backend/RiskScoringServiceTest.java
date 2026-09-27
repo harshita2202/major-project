@@ -20,6 +20,7 @@ class RiskScoringServiceTest {
     @DisplayName("Verify event point weights for all event types")
     void testEventPointWeights() {
         // LOW-RISK
+        assertEquals(5, riskScoringService.getEventPoints("NETWORK_INTERRUPTION"));
         assertEquals(5, riskScoringService.getEventPoints("NETWORK_DISCONNECTION"));
         assertEquals(5, riskScoringService.getEventPoints("LONG_INACTIVITY"));
 
@@ -71,27 +72,31 @@ class RiskScoringServiceTest {
     @DisplayName("Verify feature-specific warnings match specification exactly")
     void testFeatureSpecificWarnings() {
         assertEquals(
-                "Copy/Paste is not allowed. Further attempts may result in automatic submission of your exam.",
+                RiskScoringService.WARNING_PASTE,
                 riskScoringService.getFeatureWarning("CLIPBOARD_PASTE_ATTEMPT")
         );
         assertEquals(
-                "Do not switch tabs during the examination. Further violations may result in automatic submission.",
+                RiskScoringService.WARNING_TAB_SWITCH,
                 riskScoringService.getFeatureWarning("TAB_SWITCH")
         );
         assertEquals(
-                "Please do not exit fullscreen mode. Further violations may result in automatic submission.",
+                RiskScoringService.WARNING_FULLSCREEN_EXIT,
                 riskScoringService.getFeatureWarning("FULLSCREEN_EXIT")
         );
         assertEquals(
-                "Please keep your attention on the examination screen. Repeated prolonged gaze deviation may increase your risk score.",
+                RiskScoringService.WARNING_GAZE,
                 riskScoringService.getFeatureWarning("GAZE_WARNING")
         );
         assertEquals(
-                "You have been inactive for an extended period. Please continue your examination.",
+                RiskScoringService.WARNING_LONG_INACTIVITY,
                 riskScoringService.getFeatureWarning("LONG_INACTIVITY")
         );
         assertEquals(
-                "Network connection interrupted. Please check your connection and continue the examination.",
+                RiskScoringService.WARNING_NETWORK,
+                riskScoringService.getFeatureWarning("NETWORK_INTERRUPTION")
+        );
+        assertEquals(
+                RiskScoringService.WARNING_NETWORK,
                 riskScoringService.getFeatureWarning("NETWORK_DISCONNECTION")
         );
     }

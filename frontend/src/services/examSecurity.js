@@ -25,7 +25,8 @@ export const SECURITY_EVENT_TYPE = {
   CONTEXT_MENU_ATTEMPT: 'CONTEXT_MENU_ATTEMPT',
 
   GAZE_WARNING: 'GAZE_WARNING',
-  NETWORK_DISCONNECTION: 'NETWORK_DISCONNECTION',
+  NETWORK_INTERRUPTION: 'NETWORK_INTERRUPTION',
+  NETWORK_DISCONNECTION: 'NETWORK_INTERRUPTION', // alias
   LONG_INACTIVITY: 'LONG_INACTIVITY',
 
   PAGE_EXIT_ATTEMPT: 'PAGE_EXIT_ATTEMPT',
@@ -349,6 +350,13 @@ export function countViolations(events = []) {
     (e) => e.type === SECURITY_EVENT_TYPE.CONTEXT_MENU_ATTEMPT
   ).length;
 
+  const networkInterruptions = events.filter(
+    (e) =>
+      e.type === SECURITY_EVENT_TYPE.NETWORK_INTERRUPTION ||
+      e.type === 'NETWORK_INTERRUPTION' ||
+      e.type === 'NETWORK_DISCONNECTION'
+  ).length;
+
   const total = events.filter(
     (e) => e.severity && e.severity !== SECURITY_SEVERITY.INFO
   ).length;
@@ -361,6 +369,7 @@ export function countViolations(events = []) {
     pasteAttempts,
     shortcutAttempts,
     contextMenuAttempts,
+    networkInterruptions,
     total,
   };
 }

@@ -67,7 +67,7 @@ public class RiskScoringService {
     public int getEventPoints(String eventType) {
         if (eventType == null) return 10;
         return switch (eventType.trim().toUpperCase()) {
-            case "NETWORK_DISCONNECTION", "NETWORK" -> 5;
+            case "NETWORK_INTERRUPTION", "NETWORK_DISCONNECTION", "NETWORK" -> 5;
             case "LONG_INACTIVITY", "INACTIVITY" -> 5;
             case "GAZE_WARNING", "GAZE" -> 10;
             case "SHORTCUT_ATTEMPT", "KEYBOARD_SHORTCUT", "KEYBOARD_SHORTCUT_ATTEMPT" -> 10;
@@ -108,7 +108,7 @@ public class RiskScoringService {
             case "SHORTCUT_ATTEMPT", "KEYBOARD_SHORTCUT", "KEYBOARD_SHORTCUT_ATTEMPT" -> WARNING_KEYBOARD_SHORTCUT;
             case "GAZE_WARNING", "GAZE" -> WARNING_GAZE;
             case "LONG_INACTIVITY", "INACTIVITY" -> WARNING_LONG_INACTIVITY;
-            case "NETWORK_DISCONNECTION", "NETWORK" -> WARNING_NETWORK;
+            case "NETWORK_INTERRUPTION", "NETWORK_DISCONNECTION", "NETWORK" -> WARNING_NETWORK;
             default -> "Please follow examination rules. Further violations may result in automatic exam submission.";
         };
     }

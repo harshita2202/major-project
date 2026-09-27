@@ -514,7 +514,7 @@ export async function recordExamEvent(examId, eventPayload) {
     return res.json();
   } catch (err) {
     console.warn('Record event fallback:', err);
-    return { success: false };
+    return { success: false, networkFailed: true };
   }
 }
 

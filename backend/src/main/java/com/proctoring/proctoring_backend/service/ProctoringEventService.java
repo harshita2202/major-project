@@ -233,7 +233,7 @@ public class ProctoringEventService {
             case "FULLSCREEN_EXIT" -> "Candidate exited required fullscreen mode";
             case "GAZE_WARNING", "GAZE" -> "Prolonged gaze deviation detected away from exam window";
             case "LONG_INACTIVITY" -> "Candidate inactive for an extended period";
-            case "NETWORK_DISCONNECTION" -> "Network connection interrupted";
+            case "NETWORK_INTERRUPTION", "NETWORK_DISCONNECTION" -> "Network connection interrupted";
             default -> "Security event: " + eventType;
         };
     }

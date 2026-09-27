@@ -20,6 +20,7 @@ import ExamTimer from '../components/exam/ExamTimer';
 import QuestionCard from '../components/exam/QuestionCard';
 import QuestionNavigator from '../components/exam/QuestionNavigator';
 import SecurityViolationModal from '../components/exam/SecurityViolationModal';
+import NetworkInterruptionBanner from '../components/exam/NetworkInterruptionBanner';
 import CameraPreview from '../components/exam/CameraPreview';
 import { subscribeToSessionEvents } from '../services/websocket';
 
@@ -237,10 +238,40 @@ export default function StudentExam() {
     init.scoreData || { score: 0, correctCount: 0, totalQuestions: 0, percentage: 0 }
   );
 
+  // ── Network Interruption Grace Period (10s) State ─────────────────────────
+  const [isNetworkOffline, setIsNetworkOffline] = useState(() => {
+    return typeof navigator !== 'undefined' ? !navigator.onLine : false;
+  });
+  const [networkGraceSeconds, setNetworkGraceSeconds] = useState(10);
+  const [hasRecordedInterruption, setHasRecordedInterruption] = useState(false);
+  const [networkRestoredMessage, setNetworkRestoredMessage] = useState('');
+
+  const isOfflineRef = useRef(false);
+  const hasRecordedInterruptionRef = useRef(false);
+  const graceTimerRef = useRef(null);
+  const pendingOfflineEventRef = useRef(null);
+  const restoredTimeoutRef = useRef(null);
+
   const navigate = useNavigate();
 
   // Reset exam attempt
   const handleResetExam = () => {
+    if (graceTimerRef.current) {
+      clearInterval(graceTimerRef.current);
+      graceTimerRef.current = null;
+    }
+    if (restoredTimeoutRef.current) {
+      clearTimeout(restoredTimeoutRef.current);
+      restoredTimeoutRef.current = null;
+    }
+    isOfflineRef.current = false;
+    hasRecordedInterruptionRef.current = false;
+    pendingOfflineEventRef.current = null;
+    setIsNetworkOffline(false);
+    setNetworkGraceSeconds(10);
+    setHasRecordedInterruption(false);
+    setNetworkRestoredMessage('');
+
     clearSession(examId);
     setSessionId(null);
     setAnswers({});
@@ -438,6 +469,191 @@ export default function StudentExam() {
       }
     };
   }, [phase, handleSecurityEvent]);
+
+  // ── Network Interruption Grace Period Logic ──────────────────────────────
+  const triggerNetworkInterruptionViolation = useCallback(() => {
+    if (!isOfflineRef.current || hasRecordedInterruptionRef.current) return;
+    hasRecordedInterruptionRef.current = true;
+    setHasRecordedInterruption(true);
+
+    const netEvent = createSecurityEvent(
+      SECURITY_EVENT_TYPE.NETWORK_INTERRUPTION,
+      SECURITY_SEVERITY.LOW,
+      'Network connection interrupted. Please restore your connection.'
+    );
+
+    setSecurityEvents((prev) => {
+      const updated = [...prev, netEvent];
+      const session = loadSession(examId);
+      if (session) saveSession(examId, { ...session, securityEvents: updated });
+      return updated;
+    });
+
+    const payload = {
+      sessionId: sessionIdRef.current,
+      studentId: examMeta.candidateId || currentUser?.userId || 'STU001',
+      studentName: examMeta.candidateName || currentUser?.name || 'Alex Morgan',
+      type: 'NETWORK_INTERRUPTION',
+      severity: 'low',
+      message: 'Network connection interrupted. Please restore your connection.'
+    };
+
+    recordExamEvent(examId, payload)
+      .then((res) => {
+        if (!res || res.networkFailed) {
+          pendingOfflineEventRef.current = payload;
+          return;
+        }
+        pendingOfflineEventRef.current = null;
+        if (res.sessionId && !sessionIdRef.current) {
+          setSessionId(res.sessionId);
+        }
+        // Check auto-submitted threshold (score >= 80)
+        if (res.autoSubmitted) {
+          handleAutoTerminate(
+            res.autoSubmitMessage ||
+            'Your exam has been automatically submitted because the proctoring risk threshold was reached.'
+          );
+          return;
+        }
+        // Check medium risk warning threshold (score >= 50)
+        if (res.mediumWarningTriggered && res.mediumWarningMessage) {
+          setActiveWarningMessage(res.mediumWarningMessage);
+          setIsMediumWarning(true);
+          setActiveViolationType('NETWORK_INTERRUPTION');
+          setShowViolationModal(true);
+        }
+      })
+      .catch((err) => {
+        console.warn('Network interruption event sync deferred (offline):', err);
+        pendingOfflineEventRef.current = payload;
+      });
+  }, [examId, examMeta.candidateId, examMeta.candidateName, currentUser?.userId, currentUser?.name, handleAutoTerminate]);
+
+  const handleOfflineEvent = useCallback(() => {
+    if (phaseRef.current !== PHASE.ACTIVE) return;
+    if (isOfflineRef.current) return; // Ignore duplicate trigger while already offline
+
+    isOfflineRef.current = true;
+    setIsNetworkOffline(true);
+    hasRecordedInterruptionRef.current = false;
+    setHasRecordedInterruption(false);
+    setNetworkGraceSeconds(10);
+    setNetworkRestoredMessage('');
+
+    if (restoredTimeoutRef.current) {
+      clearTimeout(restoredTimeoutRef.current);
+      restoredTimeoutRef.current = null;
+    }
+    if (graceTimerRef.current) {
+      clearInterval(graceTimerRef.current);
+      graceTimerRef.current = null;
+    }
+
+    let remaining = 10;
+    graceTimerRef.current = setInterval(() => {
+      remaining -= 1;
+      setNetworkGraceSeconds(remaining);
+
+      if (remaining <= 0) {
+        clearInterval(graceTimerRef.current);
+        graceTimerRef.current = null;
+        triggerNetworkInterruptionViolation();
+      }
+    }, 1000);
+  }, [triggerNetworkInterruptionViolation]);
+
+  const handleOnlineEvent = useCallback(() => {
+    if (phaseRef.current !== PHASE.ACTIVE) return;
+    if (!isOfflineRef.current) return;
+
+    isOfflineRef.current = false;
+    setIsNetworkOffline(false);
+
+    if (graceTimerRef.current) {
+      clearInterval(graceTimerRef.current);
+      graceTimerRef.current = null;
+    }
+
+    const wasEventRecorded = hasRecordedInterruptionRef.current;
+
+    // Reset interruption state so a new interruption later can generate another event
+    hasRecordedInterruptionRef.current = false;
+    setHasRecordedInterruption(false);
+    setNetworkGraceSeconds(10);
+
+    // Show restored message
+    setNetworkRestoredMessage('Network connection restored. You may continue the exam.');
+    if (restoredTimeoutRef.current) clearTimeout(restoredTimeoutRef.current);
+    restoredTimeoutRef.current = setTimeout(() => {
+      setNetworkRestoredMessage('');
+    }, 5000);
+
+    // If an event was recorded while offline and could not reach backend, sync it now
+    if (wasEventRecorded && pendingOfflineEventRef.current) {
+      recordExamEvent(examId, pendingOfflineEventRef.current)
+        .then((res) => {
+          pendingOfflineEventRef.current = null;
+          if (res?.autoSubmitted) {
+            handleAutoTerminate(
+              res.autoSubmitMessage ||
+              'Your exam has been automatically submitted because the proctoring risk threshold was reached.'
+            );
+          } else if (res?.mediumWarningTriggered && res.mediumWarningMessage) {
+            setActiveWarningMessage(res.mediumWarningMessage);
+            setIsMediumWarning(true);
+            setActiveViolationType('NETWORK_INTERRUPTION');
+            setShowViolationModal(true);
+          }
+        })
+        .catch((err) => {
+          console.warn('Deferred network event sync retry notice:', err);
+        });
+    }
+  }, [examId, handleAutoTerminate]);
+
+  // ── Network offline/online listeners ───────────────────────────────────────
+  useEffect(() => {
+    if (phase !== PHASE.ACTIVE) {
+      if (graceTimerRef.current) {
+        clearInterval(graceTimerRef.current);
+        graceTimerRef.current = null;
+      }
+      if (restoredTimeoutRef.current) {
+        clearTimeout(restoredTimeoutRef.current);
+        restoredTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    // Check initial online status
+    if (typeof navigator !== 'undefined' && !navigator.onLine && !isOfflineRef.current) {
+      handleOfflineEvent();
+    }
+
+    window.addEventListener('offline', handleOfflineEvent);
+    window.addEventListener('online', handleOnlineEvent);
+
+    // Development / evaluation helpers on window
+    window.__simulateOffline = handleOfflineEvent;
+    window.__simulateOnline = handleOnlineEvent;
+
+    return () => {
+      window.removeEventListener('offline', handleOfflineEvent);
+      window.removeEventListener('online', handleOnlineEvent);
+      delete window.__simulateOffline;
+      delete window.__simulateOnline;
+
+      if (graceTimerRef.current) {
+        clearInterval(graceTimerRef.current);
+        graceTimerRef.current = null;
+      }
+      if (restoredTimeoutRef.current) {
+        clearTimeout(restoredTimeoutRef.current);
+        restoredTimeoutRef.current = null;
+      }
+    };
+  }, [phase, handleOfflineEvent, handleOnlineEvent]);
 
   // ── Persist session during exam ────────────────────────────────────────────
   useEffect(() => {
@@ -1263,6 +1479,16 @@ export default function StudentExam() {
 
       {/* Main exam layout */}
       <div style={styles.examShell}>
+        {/* ── Network Interruption Grace Period Banner ── */}
+        <NetworkInterruptionBanner
+          isOffline={isNetworkOffline}
+          graceSecondsRemaining={networkGraceSeconds}
+          hasRecordedInterruption={hasRecordedInterruption}
+          restoredMessage={networkRestoredMessage}
+          onDismissRestored={() => setNetworkRestoredMessage('')}
+          onSimulateRestore={import.meta.env.DEV ? handleOnlineEvent : undefined}
+        />
+
         {/* ── Top Bar ── */}
         <header style={styles.topBar}>
           {/* Left: exam info */}
@@ -1334,9 +1560,23 @@ export default function StudentExam() {
                 borderRadius: '9999px',
                 fontSize: '11.5px',
                 fontWeight: 700,
-                backgroundColor: 'rgba(38, 198, 218, 0.15)',
-                color: '#26c6da',
-                border: '1px solid rgba(38, 198, 218, 0.3)',
+                backgroundColor: isNetworkOffline
+                  ? hasRecordedInterruption
+                    ? 'rgba(239, 68, 68, 0.15)'
+                    : 'rgba(245, 158, 11, 0.15)'
+                  : 'rgba(38, 198, 218, 0.15)',
+                color: isNetworkOffline
+                  ? hasRecordedInterruption
+                    ? '#ef4444'
+                    : '#f59e0b'
+                  : '#26c6da',
+                border: `1px solid ${
+                  isNetworkOffline
+                    ? hasRecordedInterruption
+                      ? 'rgba(239, 68, 68, 0.3)'
+                      : 'rgba(245, 158, 11, 0.3)'
+                    : 'rgba(38, 198, 218, 0.3)'
+                }`,
               }}
             >
               <span
@@ -1344,11 +1584,19 @@ export default function StudentExam() {
                   width: '6px',
                   height: '6px',
                   borderRadius: '50%',
-                  backgroundColor: '#26c6da',
+                  backgroundColor: isNetworkOffline
+                    ? hasRecordedInterruption
+                      ? '#ef4444'
+                      : '#f59e0b'
+                    : '#26c6da',
                   display: 'inline-block',
                 }}
               />
-              Active Session
+              {isNetworkOffline
+                ? hasRecordedInterruption
+                  ? 'Offline · Penalty Recorded'
+                  : `Offline · Grace (${networkGraceSeconds}s)`
+                : 'Active Session'}
             </div>
 
             <button
