@@ -138,7 +138,6 @@ export default function SecurityViolationModal({
               <div
                 style={{
                   fontSize: '14.5px',
-                  color: 'var(--text-primary)',
                   lineHeight: 1.6,
                   fontWeight: 600,
                   padding: '14px 16px',

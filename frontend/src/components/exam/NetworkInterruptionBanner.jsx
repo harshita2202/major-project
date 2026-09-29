@@ -1,4 +1,4 @@
-import { WifiOff, Wifi, AlertTriangle, CheckCircle2, Clock, X } from 'lucide-react';
+import { WifiOff, AlertTriangle, CheckCircle2, Clock, X } from 'lucide-react';
 
 /**
  * NetworkInterruptionBanner.jsx
@@ -21,7 +21,6 @@ export default function NetworkInterruptionBanner({
   hasRecordedInterruption,
   restoredMessage,
   onDismissRestored,
-  onSimulateOffline,
   onSimulateRestore,
 }) {
   if (!isOffline && !restoredMessage) {

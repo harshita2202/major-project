@@ -40,7 +40,6 @@ import {
   isFullscreen,
   setupSecurityListeners,
   countViolations,
-  getSecurityStatus,
   saveSession,
   loadSession,
   clearSession,
@@ -864,7 +863,6 @@ export default function StudentExam() {
 
   // ── Derived values ─────────────────────────────────────────────────────────
   const violations = countViolations(securityEvents);
-  const secStatus = getSecurityStatus(violations);
   const answeredCount = Object.values(answers).filter(
     (v) => v !== undefined && v !== ''
   ).length;
