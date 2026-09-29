@@ -48,6 +48,19 @@ public class DatabaseSeeder implements CommandLineRunner {
             System.err.println("Note: Cleanup hardcoded candidates: " + e.getMessage());
         }
 
+        // Clean up hardcoded dummy violations so only real student infractions are listed
+        try {
+            List<Violation> dummyViolations = violationRepository.findAll().stream()
+                    .filter(v -> (v.getCandidateId() != null && v.getCandidateId().startsWith("cand-"))
+                            || (v.getId() != null && (v.getId().equals("VIO-101") || v.getId().equals("VIO-102") || v.getId().equals("VIO-103"))))
+                    .toList();
+            if (!dummyViolations.isEmpty()) {
+                violationRepository.deleteAll(dummyViolations);
+            }
+        } catch (Exception e) {
+            System.err.println("Note: Cleanup hardcoded violations: " + e.getMessage());
+        }
+
         if (examRepository.count() > 0) {
             System.out.println("Database already contains exams, skipping seeding.");
             return;
@@ -202,23 +215,7 @@ public class DatabaseSeeder implements CommandLineRunner {
 
         studentRepository.saveAll(List.of(s1, s2, s3, s4, s5));
 
-        // 6. Seed Violations
-        Violation v1 = new Violation("VIO-101", "cand-3", "Sarah Jenkins",
-                "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop&crop=faces",
-                "CS301 - Data Structures & Algorithms", "Multiple Faces Detected", "high", "10:14:22", "pending",
-                "Second face appeared in webcam feed for 4.2 seconds");
-
-        Violation v2 = new Violation("VIO-102", "cand-2", "David Chen",
-                "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=faces",
-                "CS501 - Advanced Coding & Algorithm Lab", "Tab Switch Detected", "medium", "10:22:05", "reviewed",
-                "Candidate switched browser window to another application");
-
-        Violation v3 = new Violation("VIO-103", "cand-3", "Sarah Jenkins",
-                "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop&crop=faces",
-                "CS301 - Data Structures & Algorithms", "Background Voice Detected", "high", "10:35:18", "pending",
-                "Audio analysis detected whisper audio above 68dB");
-
-        violationRepository.saveAll(List.of(v1, v2, v3));
+        // 6. Violations are populated dynamically from real exam proctoring events (no hardcoded seeds)
 
         // 7. Seed Users
         User u1 = new User("STU001", "alex.morgan", "alex.morgan@university.edu", "Alex Morgan", "CANDIDATE", "ACTIVE");

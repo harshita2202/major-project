@@ -418,3 +418,26 @@ export function clearSession(examId) {
     void lsErr;
   }
 }
+
+export function getAllSessions() {
+  const sessions = {};
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(SESSION_PREFIX)) {
+        const examId = key.replace(SESSION_PREFIX, '');
+        try {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            sessions[examId] = JSON.parse(raw);
+          }
+        } catch (e) {
+          void e;
+        }
+      }
+    }
+  } catch (lsErr) {
+    void lsErr;
+  }
+  return sessions;
+}

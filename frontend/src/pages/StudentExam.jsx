@@ -720,7 +720,6 @@ export default function StudentExam() {
       autoSubmitted: true,
       scoreData: calculated,
     });
-    clearSession(examId);
     if (cleanupListenersRef.current) {
       cleanupListenersRef.current();
       cleanupListenersRef.current = null;

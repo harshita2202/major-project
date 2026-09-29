@@ -32,39 +32,39 @@ export default function MalpracticeBreakdown({ violations = [] }) {
 
     const total = fullscreen + copyPaste + shortcut + other;
 
-    // Default university baseline distribution if system has freshly initialized without events
+    // If no infractions, return real 0s
     if (total === 0) {
       return {
-        total: 24,
+        total: 0,
         items: [
           {
             label: 'Fullscreen Exit',
-            count: 9,
-            percentage: 38,
+            count: 0,
+            percentage: 0,
             color: '#2563eb',
             bgColor: '#eff6ff',
             icon: Maximize2,
           },
           {
             label: 'Copy/Paste Attempt',
-            count: 6,
-            percentage: 25,
+            count: 0,
+            percentage: 0,
             color: '#0284c7',
             bgColor: '#f0f9ff',
             icon: ClipboardCopy,
           },
           {
             label: 'Shortcut Attempt',
-            count: 5,
-            percentage: 21,
+            count: 0,
+            percentage: 0,
             color: '#d97706',
             bgColor: '#fffbeb',
             icon: Keyboard,
           },
           {
             label: 'Other Infractions',
-            count: 4,
-            percentage: 16,
+            count: 0,
+            percentage: 0,
             color: '#64748b',
             bgColor: '#f8fafc',
             icon: AlertCircle,
@@ -269,7 +269,7 @@ export default function MalpracticeBreakdown({ violations = [] }) {
         }}
       >
         <Link
-          to="/violations"
+          to="/live-monitoring"
           style={{
             fontSize: '12.5px',
             fontWeight: 600,
@@ -280,7 +280,7 @@ export default function MalpracticeBreakdown({ violations = [] }) {
             gap: '4px',
           }}
         >
-          <span>View Incident Logs</span>
+          <span>View Live Invigilation</span>
           <ArrowRight size={13} />
         </Link>
       </div>

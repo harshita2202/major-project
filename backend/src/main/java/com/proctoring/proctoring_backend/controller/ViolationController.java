@@ -22,12 +22,18 @@ public class ViolationController {
 
     @GetMapping("/recent")
     public List<Violation> getRecentViolations() {
-        return violationRepository.findTop10ByOrderByIdDesc();
+        return violationRepository.findTop10ByOrderByIdDesc().stream()
+                .filter(v -> (v.getCandidateId() == null || !v.getCandidateId().startsWith("cand-"))
+                        && (v.getId() == null || (!v.getId().equals("VIO-101") && !v.getId().equals("VIO-102") && !v.getId().equals("VIO-103"))))
+                .toList();
     }
 
     @GetMapping
     public List<Violation> getAllViolations() {
-        return violationRepository.findAll();
+        return violationRepository.findAll().stream()
+                .filter(v -> (v.getCandidateId() == null || !v.getCandidateId().startsWith("cand-"))
+                        && (v.getId() == null || (!v.getId().equals("VIO-101") && !v.getId().equals("VIO-102") && !v.getId().equals("VIO-103"))))
+                .toList();
     }
 
     @PostMapping

@@ -52,6 +52,14 @@ public class ExamController {
         return examRepository.findAll();
     }
 
+    @GetMapping("/submissions")
+    public List<ExamSubmission> getSubmissions(@RequestParam(required = false) String studentId) {
+        if (studentId != null && !studentId.trim().isEmpty()) {
+            return submissionRepository.findByStudentId(studentId);
+        }
+        return submissionRepository.findAll();
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<Exam> getExamById(@PathVariable String id) {
         return examRepository.findById(id)

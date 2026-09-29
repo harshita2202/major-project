@@ -7,6 +7,7 @@ import InvigilatorLogin from './pages/auth/InvigilatorLogin';
 
 // Student Pages
 import StudentPortal from './pages/student/StudentPortal';
+import AttemptedExams from './pages/student/AttemptedExams';
 import StudentExam from './pages/StudentExam';
 
 // Invigilator Pages & Layout
@@ -15,7 +16,6 @@ import Dashboard from './pages/Dashboard';
 import LiveMonitoring from './pages/LiveMonitoring';
 import Exams from './pages/Exams';
 import Students from './pages/Students';
-import Violations from './pages/Violations';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 
@@ -36,6 +36,7 @@ export default function App() {
         <Route element={<ProtectedRoute allowedRole={ROLES.STUDENT} />}>
           <Route path="/student" element={<StudentPortal />} />
           <Route path="/student/exams" element={<StudentPortal />} />
+          <Route path="/student/attempts" element={<AttemptedExams />} />
           <Route path="/student/exam/:examId" element={<StudentExam />} />
         </Route>
 
@@ -46,7 +47,6 @@ export default function App() {
             <Route path="/live-monitoring" element={<LiveMonitoring />} />
             <Route path="/exams" element={<Exams />} />
             <Route path="/students" element={<Students />} />
-            <Route path="/violations" element={<Violations />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/settings" element={<Settings />} />
           </Route>

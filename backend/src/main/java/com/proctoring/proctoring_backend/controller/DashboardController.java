@@ -30,7 +30,10 @@ public class DashboardController {
     public Map<String, Object> getDashboardStats() {
         List<Exam> exams = examRepository.findAll();
         List<Candidate> candidates = candidateRepository.findAll();
-        List<Violation> violations = violationRepository.findAll();
+        List<Violation> violations = violationRepository.findAll().stream()
+                .filter(v -> (v.getCandidateId() == null || !v.getCandidateId().startsWith("cand-"))
+                        && (v.getId() == null || (!v.getId().equals("VIO-101") && !v.getId().equals("VIO-102") && !v.getId().equals("VIO-103"))))
+                .toList();
 
         long activeExams = exams.stream()
                 .filter(e -> "active".equalsIgnoreCase(e.getStatus()) || "in-progress".equalsIgnoreCase(e.getStatus()) || "upcoming".equalsIgnoreCase(e.getStatus()))
@@ -59,7 +62,10 @@ public class DashboardController {
 
     @GetMapping("/activity")
     public List<Map<String, Object>> getRecentActivity() {
-        List<Violation> recentViolations = violationRepository.findTop10ByOrderByIdDesc();
+        List<Violation> recentViolations = violationRepository.findTop10ByOrderByIdDesc().stream()
+                .filter(v -> (v.getCandidateId() == null || !v.getCandidateId().startsWith("cand-"))
+                        && (v.getId() == null || (!v.getId().equals("VIO-101") && !v.getId().equals("VIO-102") && !v.getId().equals("VIO-103"))))
+                .toList();
         List<Map<String, Object>> activities = new ArrayList<>();
 
         for (Violation v : recentViolations) {

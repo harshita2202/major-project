@@ -10,26 +10,28 @@ import {
   ArrowRight,
   BookOpen,
   CheckCircle,
+  Award,
+  AlertTriangle,
 } from 'lucide-react';
 import { getCurrentUser, logout } from '../../services/auth';
 import { fetchCategorizedStudentExams } from '../../services/studentExams';
 
-export default function StudentPortal() {
+export default function AttemptedExams() {
   const navigate = useNavigate();
   const user = getCurrentUser() || { name: 'Student', userId: 'STU001' };
 
-  const [upcomingExams, setUpcomingExams] = useState([]);
-  const [attemptedCount, setAttemptedCount] = useState(0);
+  const [attemptedExams, setAttemptedExams] = useState([]);
+  const [upcomingCount, setUpcomingCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
     async function loadExams() {
       try {
-        const { upcomingExams: upcoming, attemptedExams: attempts } = await fetchCategorizedStudentExams(user.userId);
+        const { upcomingExams, attemptedExams: attempts } = await fetchCategorizedStudentExams(user.userId);
         if (isMounted) {
-          setUpcomingExams(upcoming);
-          setAttemptedCount(attempts.length);
+          setAttemptedExams(attempts);
+          setUpcomingCount(upcomingExams.length);
         }
       } catch (err) {
         void err;
@@ -48,8 +50,21 @@ export default function StudentPortal() {
     navigate('/', { replace: true });
   };
 
-  const handleStartExam = (examId) => {
-    navigate(`/student/exam/${examId}`);
+  const formatAttemptDate = (rawDate) => {
+    if (!rawDate) return 'Completed';
+    try {
+      const d = new Date(rawDate);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        });
+      }
+    } catch (e) {
+      void e;
+    }
+    return rawDate;
   };
 
   return (
@@ -132,7 +147,7 @@ export default function StudentPortal() {
         </div>
       </header>
 
-      {/* Main Student Portal Content */}
+      {/* Main Content */}
       <main
         style={{
           flex: 1,
@@ -142,7 +157,7 @@ export default function StudentPortal() {
           padding: '32px 24px 60px',
         }}
       >
-        {/* Welcome Banner */}
+        {/* Welcome / Header Banner */}
         <div
           style={{
             background: 'linear-gradient(135deg, #0a1c30 0%, #0f2b48 100%)',
@@ -170,13 +185,13 @@ export default function StudentPortal() {
                 marginBottom: '4px',
               }}
             >
-              Academic Year 2026 · Remote Proctored Sessions
+              Academic Year 2026 · Submission History
             </div>
             <h1 style={{ fontSize: '24px', fontWeight: 800, margin: '0 0 6px', letterSpacing: '-0.02em' }}>
-              Welcome, {user.name}
+              My Attempted Examinations
             </h1>
             <p style={{ fontSize: '13.5px', color: '#94b4cf', margin: 0, maxWidth: '640px', lineHeight: 1.5 }}>
-              Select an upcoming examination below to review candidate regulations and start your proctored session.
+              Review your completed assessment records, evaluation scores, and proctored examination details.
             </p>
           </div>
 
@@ -190,10 +205,10 @@ export default function StudentPortal() {
             }}
           >
             <div style={{ fontSize: '20px', fontWeight: 800, color: '#26c6da' }}>
-              {upcomingExams.length}
+              {attemptedExams.length}
             </div>
             <div style={{ fontSize: '11px', color: '#8eaec9', fontWeight: 600, textTransform: 'uppercase' }}>
-              Upcoming Exams
+              Attempted Exams
             </div>
           </div>
         </div>
@@ -211,39 +226,7 @@ export default function StudentPortal() {
         >
           <button
             type="button"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '8px 16px',
-              borderRadius: '8px',
-              border: 'none',
-              backgroundColor: 'var(--pt-navy-800)',
-              color: '#ffffff',
-              fontSize: '13px',
-              fontWeight: 700,
-              cursor: 'default',
-            }}
-          >
-            <Calendar size={15} color="#26c6da" />
-            Upcoming Exams
-            <span
-              style={{
-                fontSize: '11px',
-                padding: '2px 7px',
-                borderRadius: '9999px',
-                backgroundColor: 'rgba(255, 255, 255, 0.2)',
-                color: '#ffffff',
-                fontWeight: 700,
-              }}
-            >
-              {upcomingExams.length}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => navigate('/student/attempts')}
+            onClick={() => navigate('/student')}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -259,8 +242,8 @@ export default function StudentPortal() {
               transition: 'all 0.15s ease',
             }}
           >
-            <CheckCircle size={15} color="var(--text-secondary)" />
-            My Attempts
+            <Calendar size={15} color="var(--text-secondary)" />
+            Upcoming Exams
             <span
               style={{
                 fontSize: '11px',
@@ -271,7 +254,39 @@ export default function StudentPortal() {
                 fontWeight: 700,
               }}
             >
-              {attemptedCount}
+              {upcomingCount}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: 'none',
+              backgroundColor: 'var(--pt-navy-800)',
+              color: '#ffffff',
+              fontSize: '13px',
+              fontWeight: 700,
+              cursor: 'default',
+            }}
+          >
+            <CheckCircle size={15} color="#26c6da" />
+            My Attempts
+            <span
+              style={{
+                fontSize: '11px',
+                padding: '2px 7px',
+                borderRadius: '9999px',
+                backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                color: '#ffffff',
+                fontWeight: 700,
+              }}
+            >
+              {attemptedExams.length}
             </span>
           </button>
         </div>
@@ -280,15 +295,15 @@ export default function StudentPortal() {
         <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <h2 style={{ fontSize: '19px', fontWeight: 800, color: 'var(--pt-navy-900)', margin: '0 0 2px' }}>
-              Upcoming Examinations
+              Attempted Examinations
             </h2>
             <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', margin: 0 }}>
-              Scheduled assessments ready for candidate ID {user.userId}
+              Completed and evaluated assessments for candidate ID {user.userId}
             </p>
           </div>
         </div>
 
-        {/* Exam Cards Grid */}
+        {/* Loading State */}
         {loading ? (
           <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-secondary)' }}>
             <div
@@ -302,10 +317,10 @@ export default function StudentPortal() {
                 margin: '0 auto 12px',
               }}
             />
-            <p style={{ fontSize: '13px' }}>Loading examination schedule...</p>
+            <p style={{ fontSize: '13px' }}>Loading attempted assessments...</p>
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           </div>
-        ) : upcomingExams.length === 0 ? (
+        ) : attemptedExams.length === 0 ? (
           <div
             style={{
               backgroundColor: '#ffffff',
@@ -317,14 +332,14 @@ export default function StudentPortal() {
           >
             <BookOpen size={40} color="var(--border-strong)" style={{ marginBottom: '12px' }} />
             <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--pt-navy-900)', margin: '0 0 4px' }}>
-              No Upcoming Examinations Scheduled
+              No Attempted Examinations
             </h3>
             <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 16px' }}>
-              There are currently no upcoming exams scheduled. You can review your previous assessment attempts below.
+              You have not attempted or completed any examinations yet.
             </p>
             <button
               type="button"
-              onClick={() => navigate('/student/attempts')}
+              onClick={() => navigate('/student')}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -339,7 +354,7 @@ export default function StudentPortal() {
                 cursor: 'pointer',
               }}
             >
-              View My Attempts <ArrowRight size={14} />
+              View Upcoming Exams <ArrowRight size={14} />
             </button>
           </div>
         ) : (
@@ -350,7 +365,10 @@ export default function StudentPortal() {
               gap: '20px',
             }}
           >
-            {upcomingExams.map((exam) => {
+            {attemptedExams.map((exam) => {
+              const isTerminated = exam.autoTerminated || exam.attemptStatus?.toLowerCase() === 'disqualified';
+              const isInProgress = exam.isInProgress;
+
               return (
                 <div
                   key={exam.id}
@@ -396,11 +414,32 @@ export default function StudentPortal() {
                         fontWeight: 700,
                         padding: '3px 10px',
                         borderRadius: '9999px',
-                        backgroundColor: '#fef3c7',
-                        color: '#b45309',
+                        backgroundColor: isTerminated
+                          ? '#fee2e2'
+                          : isInProgress
+                          ? '#fef3c7'
+                          : '#ecfdf5',
+                        color: isTerminated
+                          ? '#b91c1c'
+                          : isInProgress
+                          ? '#b45309'
+                          : '#047857',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px',
                       }}
                     >
-                      Upcoming
+                      {isTerminated ? (
+                        <>
+                          <AlertTriangle size={12} /> Disqualified
+                        </>
+                      ) : isInProgress ? (
+                        'In Progress'
+                      ) : (
+                        <>
+                          <CheckCircle size={12} /> Completed
+                        </>
+                      )}
                     </span>
                   </div>
 
@@ -429,7 +468,7 @@ export default function StudentPortal() {
                       {exam.description}
                     </p>
 
-                    {/* Metadata specs */}
+                    {/* Metadata & Scorecard Grid */}
                     <div
                       style={{
                         display: 'grid',
@@ -442,47 +481,87 @@ export default function StudentPortal() {
                         fontSize: '12px',
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-primary)' }}>
-                        <Clock size={13} color="var(--pt-navy-800)" />
-                        <span><strong>{exam.duration}</strong></span>
+                      {/* Score Result */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          color: isTerminated ? '#b91c1c' : 'var(--text-primary)',
+                        }}
+                      >
+                        <Award size={14} color={isTerminated ? '#b91c1c' : '#047857'} />
+                        <span>
+                          Score: <strong>{exam.percentage !== null ? `${exam.percentage}%` : 'Recorded'}</strong>
+                        </span>
                       </div>
+
+                      {/* Total Questions */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-primary)' }}>
                         <FileQuestion size={13} color="var(--pt-navy-800)" />
-                        <span><strong>{exam.totalQuestions || 20} Questions</strong></span>
+                        <span>
+                          <strong>{exam.totalQuestions} Questions</strong>
+                        </span>
                       </div>
+
+                      {/* Attempt Date */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)' }}>
                         <Calendar size={13} color="#64748b" />
-                        <span>{exam.date}</span>
+                        <span>{formatAttemptDate(exam.submittedAt)}</span>
                       </div>
+
+                      {/* Duration */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)' }}>
-                        <Eye size={13} color="#64748b" />
-                        <span style={{ fontSize: '11px' }}>{exam.proctoringMode || 'Strict AI'}</span>
+                        <Clock size={13} color="#64748b" />
+                        <span>{exam.duration || '60 mins'}</span>
                       </div>
                     </div>
 
-                    {/* Action Button */}
-                    <button
-                      type="button"
-                      onClick={() => handleStartExam(exam.id)}
-                      style={{
-                        width: '100%',
-                        padding: '11px',
-                        borderRadius: '8px',
-                        border: 'none',
-                        backgroundColor: 'var(--pt-navy-800)',
-                        color: '#ffffff',
-                        fontSize: '13.5px',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '8px',
-                        transition: 'all 0.15s ease',
-                      }}
-                    >
-                      Start Exam <ArrowRight size={15} />
-                    </button>
+                    {/* Card Action */}
+                    {isInProgress ? (
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/student/exam/${exam.id}`)}
+                        style={{
+                          width: '100%',
+                          padding: '11px',
+                          borderRadius: '8px',
+                          border: 'none',
+                          backgroundColor: 'var(--pt-navy-800)',
+                          color: '#ffffff',
+                          fontSize: '13.5px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '8px',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        Resume Exam <ArrowRight size={15} />
+                      </button>
+                    ) : (
+                      <div
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          borderRadius: '8px',
+                          backgroundColor: isTerminated ? '#fef2f2' : 'var(--bg-surface-subtle)',
+                          border: `1px solid ${isTerminated ? '#fecaca' : 'var(--border-subtle)'}`,
+                          color: isTerminated ? '#991b1b' : 'var(--text-secondary)',
+                          fontSize: '12.5px',
+                          fontWeight: 700,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                        }}
+                      >
+                        <CheckCircle size={14} color={isTerminated ? '#dc2626' : '#059669'} />
+                        {isTerminated ? 'Session Terminated' : 'Attempt Recorded & Evaluated'}
+                      </div>
+                    )}
                   </div>
                 </div>
               );

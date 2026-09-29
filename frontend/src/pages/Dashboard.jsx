@@ -79,14 +79,13 @@ export default function Dashboard() {
   }, [candidates]);
 
   const totalMalpracticesCount = useMemo(() => {
-    return violations.length > 0 ? violations.length : (stats?.activeAlerts?.value || 24);
-  }, [violations, stats]);
+    return violations.length;
+  }, [violations]);
 
   const completedExamsCount = useMemo(() => {
-    const count = exams.filter((e) =>
+    return exams.filter((e) =>
       ['completed', 'finished'].includes((e.status || '').toLowerCase())
     ).length;
-    return count > 0 ? count : 18;
   }, [exams]);
 
   if (loading) {
@@ -127,16 +126,6 @@ export default function Dashboard() {
           >
             Examination Dashboard
           </h2>
-          <p
-            style={{
-              fontSize: '13.5px',
-              color: '#64748b',
-              marginTop: '4px',
-              marginBottom: 0,
-            }}
-          >
-            Real-time overview of active sessions, student monitoring, and malpractice telemetry
-          </p>
         </div>
 
         {/* Sync & Live Status Controls */}

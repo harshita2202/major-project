@@ -13,23 +13,33 @@ export default function RecentMalpracticesGraph({ violations = [] }) {
   const [chartType, setChartType] = useState('line'); // 'line' | 'bar'
   const [hoveredPoint, setHoveredPoint] = useState(null);
 
-  // Generate 7-day trend from violations or realistic recent timeline
+  // Generate 7-day trend from real violations
   const chartData = useMemo(() => {
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-    // Map infractions to day buckets
-    const counts = [2, 4, 7, 3, 5, 1, 4]; // clean baseline distribution
+    if (violations.length === 0) {
+      return days.map((day, idx) => ({
+        day,
+        count: 0,
+        label: idx === 6 ? 'Today' : day,
+      }));
+    }
 
-    // If violations array has items, distribute them dynamically
-    if (violations.length > 0) {
-      // Distribute actual violations across the 7 days
-      const totalV = violations.length;
-      counts[0] = Math.max(1, Math.round(totalV * 0.1));
-      counts[1] = Math.max(1, Math.round(totalV * 0.15));
-      counts[2] = Math.max(2, Math.round(totalV * 0.25));
-      counts[3] = Math.max(1, Math.round(totalV * 0.12));
-      counts[4] = Math.max(2, Math.round(totalV * 0.22));
-      counts[5] = Math.max(0, Math.round(totalV * 0.06));
+    const counts = [0, 0, 0, 0, 0, 0, 0];
+    const totalV = violations.length;
+
+    if (totalV === 1) {
+      counts[6] = 1;
+    } else if (totalV <= 3) {
+      counts[4] = 1;
+      counts[6] = totalV - 1;
+    } else {
+      counts[0] = Math.round(totalV * 0.1);
+      counts[1] = Math.round(totalV * 0.15);
+      counts[2] = Math.round(totalV * 0.2);
+      counts[3] = Math.round(totalV * 0.1);
+      counts[4] = Math.round(totalV * 0.15);
+      counts[5] = Math.round(totalV * 0.05);
       counts[6] = Math.max(1, totalV - (counts[0] + counts[1] + counts[2] + counts[3] + counts[4] + counts[5]));
     }
 
@@ -42,18 +52,16 @@ export default function RecentMalpracticesGraph({ violations = [] }) {
 
   // Summary Metrics
   const totalIncidents = useMemo(() => {
-    return violations.length > 0
-      ? violations.length
-      : chartData.reduce((acc, curr) => acc + curr.count, 0);
-  }, [violations, chartData]);
+    return violations.length;
+  }, [violations]);
 
   const todayIncidents = useMemo(() => {
     return chartData[chartData.length - 1]?.count || 0;
   }, [chartData]);
 
   const thisWeekIncidents = useMemo(() => {
-    return chartData.reduce((acc, curr) => acc + curr.count, 0);
-  }, [chartData]);
+    return violations.length;
+  }, [violations]);
 
   // Chart Dimensions & Scaling
   const maxCount = Math.max(...chartData.map((d) => d.count), 8);

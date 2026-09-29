@@ -175,22 +175,51 @@ export async function getExamActivity() {
   }
 }
 
+// ── Real Violations & Incident Logs Tracking ────────────────────────────────
+const VIOLATIONS_STORAGE_KEY = 'proctor_real_violations';
+
+export function getLocalViolations() {
+  try {
+    const raw = localStorage.getItem(VIOLATIONS_STORAGE_KEY);
+    if (!raw) return [];
+    const list = JSON.parse(raw);
+    return Array.isArray(list) ? list : [];
+  } catch (err) {
+    void err;
+    return [];
+  }
+}
+
+export function saveLocalViolation(violation) {
+  try {
+    const existing = getLocalViolations();
+    const isDuplicate = existing.some(
+      (item) => item.student === violation.student && item.type === violation.type && Math.abs(Date.now() - (item.timestampMs || 0)) < 1500
+    );
+    if (!isDuplicate) {
+      existing.unshift({ ...violation, timestampMs: Date.now() });
+      localStorage.setItem(VIOLATIONS_STORAGE_KEY, JSON.stringify(existing.slice(0, 100)));
+    }
+  } catch (err) {
+    void err;
+  }
+}
+
+export function clearAllViolationsCache() {
+  try {
+    localStorage.removeItem(VIOLATIONS_STORAGE_KEY);
+  } catch (err) {
+    void err;
+  }
+}
+
 /**
  * Recent Violations API: GET /api/violations/recent
+ * Returns real recent violations without hardcoded dummy fallbacks
  */
 export async function getRecentViolations() {
-  if (USE_MOCK_FALLBACK) {
-    return [...mockRecentViolations];
-  }
-  try {
-    const res = await fetch(`${API_BASE_URL}/api/violations/recent`);
-    if (!res.ok) throw new Error('Failed to fetch recent violations');
-    const data = await res.json();
-    return data.map(normalizeViolation);
-  } catch (err) {
-    console.warn('Recent violations fallback:', err);
-    return [...mockRecentViolations];
-  }
+  const all = await getAllViolations();
+  return all.slice(0, 10);
 }
 
 // ── Active Student Exam Attempt Tracking ────────────────────────────────────
@@ -501,9 +530,53 @@ export async function submitExam(examId, payload) {
 }
 
 /**
+ * Get Exam Submissions API: GET /api/exams/submissions
+ */
+export async function getExamSubmissions(studentId) {
+  try {
+    const url = studentId
+      ? `${API_BASE_URL}/api/exams/submissions?studentId=${encodeURIComponent(studentId)}`
+      : `${API_BASE_URL}/api/exams/submissions`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Failed to fetch submissions');
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    console.warn('Exam submissions fallback:', err);
+    return [];
+  }
+}
+
+/**
  * Record Security Event / Telemetry: POST /api/exams/:id/events
  */
 export async function recordExamEvent(examId, eventPayload) {
+  const studentName = eventPayload.studentName || eventPayload.candidateName || 'Alex Morgan';
+  const studentId = eventPayload.studentId || eventPayload.candidateId || 'STU001';
+  const eventType = eventPayload.type || eventPayload.eventType || 'SECURITY_WARNING';
+  const severity = eventPayload.severity
+    ? (eventPayload.severity.charAt(0).toUpperCase() + eventPayload.severity.slice(1).toLowerCase())
+    : 'Medium';
+  const message = eventPayload.message || eventPayload.details || 'Security event detected';
+
+  // Save real violation to local storage immediately so it syncs across tabs in real-time
+  saveLocalViolation({
+    id: 'VIO-' + (Date.now() % 100000),
+    candidateId: studentId,
+    studentId: studentId,
+    candidateName: studentName,
+    student: studentName,
+    avatar: studentName.slice(0, 2).toUpperCase(),
+    exam: `Exam ${examId}`,
+    violation: eventType,
+    type: eventType,
+    severity: severity,
+    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    status: 'Flagged',
+    details: message
+  });
+
   try {
     const res = await fetch(`${API_BASE_URL}/api/exams/${examId}/events`, {
       method: 'POST',
@@ -537,20 +610,37 @@ export async function getStudents() {
 
 /**
  * Violations Directory API: GET /api/violations
+ * Returns real synchronized violations from PostgreSQL and local active sessions (no hardcoded seeds)
  */
 export async function getAllViolations() {
-  if (USE_MOCK_FALLBACK) {
-    return [...mockAllViolations];
-  }
+  let backendViolations = [];
   try {
     const res = await fetch(`${API_BASE_URL}/api/violations`);
-    if (!res.ok) throw new Error('Failed to fetch violations');
-    const data = await res.json();
-    return data.map(normalizeViolation);
+    if (res.ok) {
+      const data = await res.json();
+      backendViolations = (Array.isArray(data) ? data : [])
+        .filter((v) => (v.candidateId == null || !v.candidateId.startsWith('cand-'))
+          && (v.id == null || (!v.id.startsWith('VIO-101') && !v.id.startsWith('VIO-102') && !v.id.startsWith('VIO-103'))))
+        .map(normalizeViolation);
+    }
   } catch (err) {
-    console.warn('All violations fallback:', err);
-    return [...mockAllViolations];
+    console.warn('Violations fetch fallback:', err);
   }
+
+  const localViolations = getLocalViolations().map(normalizeViolation);
+  const map = new Map();
+
+  // Prioritize real backend records
+  backendViolations.forEach((v) => map.set(v.id, v));
+
+  // Merge local real violations
+  localViolations.forEach((v) => {
+    if (!map.has(v.id)) {
+      map.set(v.id, v);
+    }
+  });
+
+  return Array.from(map.values());
 }
 
 /**

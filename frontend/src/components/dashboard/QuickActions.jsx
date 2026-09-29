@@ -1,4 +1,4 @@
-import { Video, PlusCircle, ShieldAlert, FileText, ArrowUpRight } from 'lucide-react';
+import { Video, PlusCircle, Users, FileText, ArrowUpRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 /**
@@ -26,13 +26,13 @@ export default function QuickActions() {
       badge: 'Management',
     },
     {
-      title: 'Incident Audit Logs',
-      description: 'Review detailed infractions, evidence, and timelines',
-      to: '/violations',
-      icon: ShieldAlert,
+      title: 'Student Roster',
+      description: 'Verify candidate enrollments and biometrics',
+      to: '/students',
+      icon: Users,
       color: '#d97706',
       bgColor: '#fffbeb',
-      badge: 'Audit',
+      badge: 'Roster',
     },
     {
       title: 'Integrity Reports',

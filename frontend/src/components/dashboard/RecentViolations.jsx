@@ -31,11 +31,11 @@ export default function RecentViolations({ violations = [] }) {
 
     if (total === 0) {
       return {
-        total: 24,
-        fullscreen: 9,
-        copyPaste: 6,
-        shortcut: 5,
-        other: 4,
+        total: 0,
+        fullscreen: 0,
+        copyPaste: 0,
+        shortcut: 0,
+        other: 0,
       };
     }
 
@@ -211,10 +211,10 @@ export default function RecentViolations({ violations = [] }) {
         }}
       >
         <span style={{ fontSize: '12px', color: '#64748b' }}>
-          Detailed individual logs available in audit registry
+          Real-time telemetry monitored across active exam sessions
         </span>
         <Link
-          to="/violations"
+          to="/live-monitoring"
           style={{
             fontSize: '12px',
             fontWeight: 600,
@@ -225,7 +225,7 @@ export default function RecentViolations({ violations = [] }) {
             gap: '4px',
           }}
         >
-          <span>View Audit Logs</span>
+          <span>View Live Monitoring</span>
           <ArrowRight size={13} />
         </Link>
       </div>

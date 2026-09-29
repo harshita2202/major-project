@@ -4,7 +4,6 @@ import {
   Video,
   BookOpen,
   Users,
-  AlertTriangle,
   FileBarChart2,
   Settings,
   Shield,
@@ -31,7 +30,6 @@ const NAV_GROUPS = [
   {
     label: 'Audit & Compliance',
     items: [
-      { name: 'Incident Logs', path: '/violations', icon: AlertTriangle },
       { name: 'Integrity Reports', path: '/reports', icon: FileBarChart2 }
     ]
   },
