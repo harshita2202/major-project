@@ -132,17 +132,24 @@ export default function StudentExam() {
       : MOCK_QUESTIONS.slice(0, examMeta.totalQuestions || MOCK_QUESTIONS.length);
   });
 
+  const [accessError, setAccessError] = useState(null);
+
   useEffect(() => {
     let isMounted = true;
-    getExamQuestions(examId).then((data) => {
+    const studentId = currentUser?.userId || examMeta.candidateId || 'STU001';
+    getExamQuestions(examId, studentId).then((data) => {
       if (isMounted && data && data.length > 0) {
         setQuestions(data);
       }
-    }).catch((err) => void err);
+    }).catch((err) => {
+      if (isMounted && (err.status === 403 || err.status === 400)) {
+        setAccessError(err.message);
+      }
+    });
     return () => {
       isMounted = false;
     };
-  }, [examId]);
+  }, [examId, currentUser?.userId, examMeta.candidateId]);
 
   const INITIAL_SECONDS = examMeta.durationMinutes * 60;
   const MAX_TAB_SWITCHES = examMeta.maxTabSwitchWarnings || 3;
@@ -774,6 +781,10 @@ export default function StudentExam() {
         setSessionId(startedSessionId);
       }
     } catch (err) {
+      if (err.status === 403 || err.status === 400) {
+        setAccessError(err.message);
+        return;
+      }
       console.warn('startExamAttempt sync:', err);
     }
 
@@ -880,6 +891,59 @@ export default function StudentExam() {
           <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginTop: '16px' }}>
             Initialising ProctorTrack™ secure session…
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Access Error / Window Closed Screen ──────────────────────────────────
+  if (accessError) {
+    return (
+      <div style={styles.fullPage}>
+        <div
+          style={{
+            width: '100%',
+            maxWidth: '520px',
+            backgroundColor: '#ffffff',
+            borderRadius: '16px',
+            padding: '36px 32px',
+            textAlign: 'center',
+            boxShadow: 'var(--shadow-xl)',
+            border: '1px solid var(--border-subtle)',
+          }}
+        >
+          <div
+            style={{
+              width: '60px',
+              height: '60px',
+              borderRadius: '50%',
+              backgroundColor: '#fee2e2',
+              color: '#dc2626',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 20px',
+            }}
+          >
+            <AlertTriangle size={30} />
+          </div>
+
+          <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--pt-navy-900)', margin: '0 0 10px' }}>
+            Examination Access Restricted
+          </h2>
+
+          <p style={{ fontSize: '13.5px', color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 24px' }}>
+            {accessError}
+          </p>
+
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => navigate('/student')}
+            style={{ width: '100%', padding: '12px', fontSize: '14px', fontWeight: 700 }}
+          >
+            Return to Candidate Portal
+          </button>
         </div>
       </div>
     );
@@ -1624,6 +1688,7 @@ export default function StudentExam() {
             >
               {currentQuestion ? (
                 <QuestionCard
+                  examId={examId}
                   question={currentQuestion}
                   questionNumber={currentIndex + 1}
                   totalQuestions={questions.length}

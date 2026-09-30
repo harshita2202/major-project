@@ -23,10 +23,24 @@ public class Exam {
     private String time;
     private String duration;
     private int studentsCount;
-    private String status;
+    private String status; // "draft", "published", "upcoming", "ongoing", "completed"
     private String proctoringMode;
-    private String type; // "mcq" or "coding"
+    private String type; // "mcq", "coding", "mixed"
     private int totalQuestions;
+
+    // Extended fields for complete exam management
+    private Integer durationMinutes = 60;
+    private String startTime; // e.g. "10:00 AM" or "10:00"
+    private String endTime;   // e.g. "02:00 PM" or "14:00" (availability window end)
+    private String windowStartDate; // e.g. "2026-09-30"
+    private String windowEndDate;   // e.g. "2026-09-30"
+    private Integer totalMarks = 0;
+
+    @Column(length = 4000)
+    private String instructions;
+
+    private Integer passingMarks;
+
     private LocalDateTime createdAt = LocalDateTime.now();
 
     public Exam() {}
@@ -45,6 +59,8 @@ public class Exam {
         this.proctoringMode = proctoringMode;
         this.type = type;
         this.totalQuestions = totalQuestions;
+        this.startTime = time;
+        this.createdAt = LocalDateTime.now();
     }
 
     public String getId() { return id; }
@@ -82,6 +98,30 @@ public class Exam {
 
     public int getTotalQuestions() { return totalQuestions; }
     public void setTotalQuestions(int totalQuestions) { this.totalQuestions = totalQuestions; }
+
+    public int getDurationMinutes() { return durationMinutes != null ? durationMinutes : 60; }
+    public void setDurationMinutes(Integer durationMinutes) { this.durationMinutes = durationMinutes != null ? durationMinutes : 60; }
+
+    public String getStartTime() { return startTime; }
+    public void setStartTime(String startTime) { this.startTime = startTime; }
+
+    public String getEndTime() { return endTime; }
+    public void setEndTime(String endTime) { this.endTime = endTime; }
+
+    public String getWindowStartDate() { return windowStartDate; }
+    public void setWindowStartDate(String windowStartDate) { this.windowStartDate = windowStartDate; }
+
+    public String getWindowEndDate() { return windowEndDate; }
+    public void setWindowEndDate(String windowEndDate) { this.windowEndDate = windowEndDate; }
+
+    public int getTotalMarks() { return totalMarks != null ? totalMarks : 0; }
+    public void setTotalMarks(Integer totalMarks) { this.totalMarks = totalMarks != null ? totalMarks : 0; }
+
+    public String getInstructions() { return instructions; }
+    public void setInstructions(String instructions) { this.instructions = instructions; }
+
+    public Integer getPassingMarks() { return passingMarks; }
+    public void setPassingMarks(Integer passingMarks) { this.passingMarks = passingMarks; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

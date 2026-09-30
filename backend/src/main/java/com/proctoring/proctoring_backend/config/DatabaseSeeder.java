@@ -17,6 +17,8 @@ public class DatabaseSeeder implements CommandLineRunner {
     private final ViolationRepository violationRepository;
     private final UserRepository userRepository;
     private final ExamSessionRepository examSessionRepository;
+    private final ExamAssignmentRepository examAssignmentRepository;
+    private final TestCaseRepository testCaseRepository;
 
     public DatabaseSeeder(ExamRepository examRepository,
                           QuestionRepository questionRepository,
@@ -24,7 +26,9 @@ public class DatabaseSeeder implements CommandLineRunner {
                           StudentRepository studentRepository,
                           ViolationRepository violationRepository,
                           UserRepository userRepository,
-                          ExamSessionRepository examSessionRepository) {
+                          ExamSessionRepository examSessionRepository,
+                          ExamAssignmentRepository examAssignmentRepository,
+                          TestCaseRepository testCaseRepository) {
         this.examRepository = examRepository;
         this.questionRepository = questionRepository;
         this.candidateRepository = candidateRepository;
@@ -32,6 +36,8 @@ public class DatabaseSeeder implements CommandLineRunner {
         this.violationRepository = violationRepository;
         this.userRepository = userRepository;
         this.examSessionRepository = examSessionRepository;
+        this.examAssignmentRepository = examAssignmentRepository;
+        this.testCaseRepository = testCaseRepository;
     }
 
     @Override
@@ -59,6 +65,35 @@ public class DatabaseSeeder implements CommandLineRunner {
             }
         } catch (Exception e) {
             System.err.println("Note: Cleanup hardcoded violations: " + e.getMessage());
+        }
+
+        if (examAssignmentRepository.count() == 0) {
+            List<ExamAssignment> defaultAssignments = List.of(
+                    new ExamAssignment("asgn-1", "exam-1", "STU001", "Alex Morgan", "alex.morgan@university.edu"),
+                    new ExamAssignment("asgn-2", "exam-1", "STU002", "David Chen", "david.chen@university.edu"),
+                    new ExamAssignment("asgn-3", "exam-1", "STU003", "Sarah Jenkins", "sarah.j@university.edu"),
+                    new ExamAssignment("asgn-4", "exam-2", "STU001", "Alex Morgan", "alex.morgan@university.edu"),
+                    new ExamAssignment("asgn-5", "exam-2", "STU002", "David Chen", "david.chen@university.edu"),
+                    new ExamAssignment("asgn-6", "exam-2", "STU004", "Marcus Brody", "m.brody@university.edu"),
+                    new ExamAssignment("asgn-7", "exam-3", "STU001", "Alex Morgan", "alex.morgan@university.edu"),
+                    new ExamAssignment("asgn-8", "exam-3", "STU005", "Emma Watson", "emma.w@university.edu")
+            );
+            examAssignmentRepository.saveAll(defaultAssignments);
+        }
+
+        if (testCaseRepository.count() == 0) {
+            List<TestCase> defaultTestCases = List.of(
+                    new TestCase("tc-201-1", "q-201", "exam-2", "reverseString('hello')", "'olleh'", true, 5, 0),
+                    new TestCase("tc-201-2", "q-201", "exam-2", "reverseString('algorithm')", "'mhtirogla'", true, 5, 1),
+                    new TestCase("tc-201-3", "q-201", "exam-2", "reverseString('world')", "'dlrow'", false, 5, 2),
+                    new TestCase("tc-202-1", "q-202", "exam-2", "twoSum([2, 7, 11, 15], 9)", "[0, 1]", true, 5, 0),
+                    new TestCase("tc-202-2", "q-202", "exam-2", "twoSum([3, 2, 4], 6)", "[1, 2]", true, 5, 1),
+                    new TestCase("tc-202-3", "q-202", "exam-2", "twoSum([3, 3], 6)", "[0, 1]", false, 5, 2),
+                    new TestCase("tc-203-1", "q-203", "exam-2", "isPalindrome(121)", "true", true, 5, 0),
+                    new TestCase("tc-203-2", "q-203", "exam-2", "isPalindrome(-121)", "false", true, 5, 1),
+                    new TestCase("tc-203-3", "q-203", "exam-2", "isPalindrome(10)", "false", false, 5, 2)
+            );
+            testCaseRepository.saveAll(defaultTestCases);
         }
 
         if (examRepository.count() > 0) {

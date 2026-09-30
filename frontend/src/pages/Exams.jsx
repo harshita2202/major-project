@@ -1,89 +1,124 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, BookOpen, Clock, Calendar, Users, Eye, Play, CheckCircle } from 'lucide-react';
+import {
+  Plus,
+  BookOpen,
+  Clock,
+  Calendar,
+  Users,
+  Eye,
+  Play,
+  CheckCircle,
+  Award,
+  Trash2,
+  Send,
+  FileText,
+  Code2,
+  Sparkles,
+  HelpCircle
+} from 'lucide-react';
 import StatusBadge from '../components/common/StatusBadge';
 import SearchBar from '../components/common/SearchBar';
-import Modal from '../components/common/Modal';
 import EmptyState from '../components/common/EmptyState';
 import LoadingSpinner from '../components/common/LoadingSpinner';
-import { getExams, createExam } from '../services/api';
+import CreateExamWizard from '../components/exam-creator/CreateExamWizard';
+import ExamResultsModal from '../components/exam-creator/ExamResultsModal';
+import { getExams, publishExam, deleteExam } from '../services/api';
 
 export default function Exams() {
   const [exams, setExams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Form state
-  const [formData, setFormData] = useState({
-    name: '',
-    code: '',
-    description: '',
-    duration: '60',
-    date: '2026-09-22',
-    time: '10:00 AM',
-    proctoringMode: 'Strict AI'
-  });
+  // Modals state
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [isResultsModalOpen, setIsResultsModalOpen] = useState(false);
+  const [selectedExamForResults, setSelectedExamForResults] = useState(null);
+  const [actionNotice, setActionNotice] = useState(null);
+
+  const loadExams = async () => {
+    try {
+      const data = await getExams();
+      setExams(data);
+    } catch (err) {
+      console.error('Failed to load exams:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    async function loadExams() {
-      try {
-        const data = await getExams();
-        setExams(data);
-      } catch (err) {
-        console.error('Failed to load exams:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
     loadExams();
   }, []);
+
+  const showNotice = (msg, isError = false) => {
+    setActionNotice({ text: msg, isError });
+    setTimeout(() => {
+      setActionNotice(null);
+    }, 4000);
+  };
+
+  const handlePublish = async (examId) => {
+    try {
+      await publishExam(examId);
+      showNotice('Exam successfully published and active for assigned candidates!');
+      loadExams();
+    } catch (err) {
+      showNotice(err.message || 'Failed to publish exam', true);
+    }
+  };
+
+  const handleDelete = async (examId, examName) => {
+    if (!window.confirm(`Are you sure you want to delete "${examName}"?`)) {
+      return;
+    }
+    try {
+      await deleteExam(examId);
+      setExams(exams.filter((e) => e.id !== examId));
+      showNotice(`Exam "${examName}" deleted.`);
+    } catch (err) {
+      showNotice(err.message || 'Failed to delete exam', true);
+    }
+  };
+
+  const handleOpenResults = (exam) => {
+    setSelectedExamForResults(exam);
+    setIsResultsModalOpen(true);
+  };
+
+  const handleExamCreated = (newExam) => {
+    showNotice(`Exam "${newExam.title || newExam.name}" created successfully!`);
+    loadExams();
+  };
 
   const filteredExams = useMemo(() => {
     let list = [...exams];
 
     if (filterStatus !== 'All') {
-      list = list.filter((e) => e.status.toLowerCase() === filterStatus.toLowerCase());
+      const filterLower = filterStatus.toLowerCase();
+      list = list.filter((e) => {
+        const s = (e.status || '').toLowerCase();
+        if (filterLower === 'published') return s === 'published' || s === 'active';
+        if (filterLower === 'draft') return s === 'draft';
+        if (filterLower === 'live') return s === 'live' || s === 'in-progress';
+        if (filterLower === 'completed') return s === 'completed';
+        return s === filterLower;
+      });
     }
 
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
       list = list.filter(
         (e) =>
-          e.name.toLowerCase().includes(term) ||
-          e.code.toLowerCase().includes(term) ||
+          (e.name && e.name.toLowerCase().includes(term)) ||
+          (e.title && e.title.toLowerCase().includes(term)) ||
+          (e.code && e.code.toLowerCase().includes(term)) ||
           (e.description && e.description.toLowerCase().includes(term))
       );
     }
 
     return list;
   }, [exams, filterStatus, searchTerm]);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!formData.name.trim()) return;
-
-    setIsSubmitting(true);
-    try {
-      const newExam = await createExam(formData);
-      setExams([newExam, ...exams]);
-      setIsModalOpen(false);
-      setFormData({
-        name: '',
-        code: '',
-        description: '',
-        duration: '60',
-        date: '2026-09-22',
-        time: '10:00 AM',
-        proctoringMode: 'Strict AI'
-      });
-    } catch (err) {
-      console.error('Failed to create exam:', err);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   if (loading) {
     return <LoadingSpinner text="Loading examinations..." size={36} />;
@@ -95,21 +130,44 @@ export default function Exams() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--pt-navy-900)', margin: 0, letterSpacing: '-0.02em' }}>
-            Exam Schedule & ProctorTrack™ Configuration
+            Exam Management &amp; ProctorTrack™ Configuration
           </h2>
           <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginTop: '3px', margin: 0 }}>
-            Create and manage assessments with ProctorAuto™, ProctorLive™, and ProctorQA™ invigilation modes
+            Create, schedule, and grade full assessments with automated test case evaluation &amp; student assignments
           </p>
         </div>
 
         <button
           type="button"
           className="btn btn-primary"
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => setIsWizardOpen(true)}
+          style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
         >
-          <Plus size={16} /> Schedule New Exam
+          <Plus size={16} /> Create New Exam
         </button>
       </div>
+
+      {/* Action Notice Alert */}
+      {actionNotice && (
+        <div
+          style={{
+            padding: '12px 18px',
+            borderRadius: '8px',
+            backgroundColor: actionNotice.isError ? '#fef2f2' : '#f0fdf4',
+            border: '1px solid',
+            borderColor: actionNotice.isError ? '#fecaca' : '#bbf7d0',
+            color: actionNotice.isError ? '#dc2626' : '#15803d',
+            fontSize: '13px',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}
+        >
+          <CheckCircle size={16} />
+          <span>{actionNotice.text}</span>
+        </div>
+      )}
 
       {/* Filter and Search Bar */}
       <div
@@ -122,7 +180,7 @@ export default function Exams() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {['All', 'Live', 'Upcoming', 'Completed'].map((status) => (
+          {['All', 'Live', 'Published', 'Draft', 'Completed'].map((status) => (
             <button
               key={status}
               type="button"
@@ -171,223 +229,203 @@ export default function Exams() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Exam Name</th>
-                  <th>Date & Time</th>
-                  <th>Duration</th>
-                  <th>Students</th>
+                  <th>Exam Name &amp; Code</th>
+                  <th>Format</th>
+                  <th>Availability Window</th>
+                  <th>Duration &amp; Marks</th>
+                  <th>Candidates</th>
                   <th>Status</th>
                   <th style={{ textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredExams.map((exam) => (
-                  <tr key={exam.id}>
-                    <td>
-                      <div>
-                        <div style={{ fontWeight: 700, color: 'var(--pt-navy-900)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span>{exam.name}</span>
+                {filteredExams.map((exam) => {
+                  const examTitle = exam.title || exam.name;
+                  const isDraft = (exam.status || '').toLowerCase() === 'draft';
+                  const isLive = (exam.status || '').toLowerCase() === 'live' || (exam.status || '').toLowerCase() === 'in-progress';
+                  const isPublished = (exam.status || '').toLowerCase() === 'published' || (exam.status || '').toLowerCase() === 'active';
+                  const isCompleted = (exam.status || '').toLowerCase() === 'completed';
+
+                  const formatBadge = exam.examType === 'coding' ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', backgroundColor: '#e0e7ff', color: '#3730a3' }}>
+                      <Code2 size={12} /> Coding
+                    </span>
+                  ) : exam.examType === 'mcq' ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', backgroundColor: '#e0f2fe', color: '#0369a1' }}>
+                      <HelpCircle size={12} /> MCQ
+                    </span>
+                  ) : (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', backgroundColor: '#f3e8ff', color: '#6b21a8' }}>
+                      <Sparkles size={12} /> Mixed
+                    </span>
+                  );
+
+                  return (
+                    <tr key={exam.id}>
+                      <td>
+                        <div>
+                          <div style={{ fontWeight: 700, color: 'var(--pt-navy-900)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span>{examTitle}</span>
+                            <span
+                              style={{
+                                fontSize: '10.5px',
+                                fontWeight: 700,
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                backgroundColor: 'var(--pt-blue-50)',
+                                color: 'var(--pt-navy-800)',
+                                fontFamily: 'var(--font-mono)',
+                                border: '1px solid var(--primary-100)'
+                              }}
+                            >
+                              {exam.code}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '3px', maxWidth: '320px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {exam.description}
+                          </div>
+                        </div>
+                      </td>
+
+                      <td>{formatBadge}</td>
+
+                      <td>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '12.5px' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--pt-navy-900)', fontWeight: 600 }}>
+                            <Calendar size={13} color="var(--pt-blue-800)" /> {exam.date || exam.windowStartDate || 'Today'}
+                          </span>
+                          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                            {exam.time || `${exam.startTime || '10:00 AM'} - ${exam.endTime || '12:00 PM'}`}
+                          </span>
+                        </div>
+                      </td>
+
+                      <td>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '12.5px' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#475569' }}>
+                            <Clock size={13} color="#64748b" /> {exam.durationMinutes ? `${exam.durationMinutes} mins` : exam.duration}
+                          </span>
+                          <span style={{ fontSize: '11px', color: '#0369a1', fontWeight: 600 }}>
+                            Total: {exam.totalMarks || 100} pts
+                          </span>
+                        </div>
+                      </td>
+
+                      <td>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', fontWeight: 600, color: '#0f172a' }}>
+                          <Users size={13} color="#2563eb" /> {exam.studentsCount || (exam.assignedStudents ? exam.assignedStudents.length : 0)} Candidates
+                        </span>
+                      </td>
+
+                      <td>
+                        {isDraft ? (
                           <span
                             style={{
-                              fontSize: '10.5px',
+                              fontSize: '11px',
                               fontWeight: 700,
-                              padding: '1px 6px',
-                              borderRadius: '4px',
-                              backgroundColor: 'var(--pt-blue-50)',
-                              color: 'var(--pt-navy-800)',
-                              fontFamily: 'var(--font-mono)',
-                              border: '1px solid var(--primary-100)'
+                              padding: '3px 8px',
+                              borderRadius: '9999px',
+                              backgroundColor: '#f1f5f9',
+                              color: '#64748b',
+                              border: '1px solid #cbd5e1'
                             }}
                           >
-                            {exam.code}
+                            Draft
                           </span>
-                        </div>
-                        <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '3px' }}>
-                          {exam.description}
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '13px' }}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--pt-navy-900)', fontWeight: 600 }}>
-                          <Calendar size={13} color="var(--pt-blue-800)" /> {exam.date}
-                        </span>
-                        <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
-                          {exam.time}
-                        </span>
-                      </div>
-                    </td>
-                    <td>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#475569' }}>
-                        <Clock size={13} color="#64748b" /> {exam.duration}
-                      </span>
-                    </td>
-                    <td>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 600, color: '#0f172a' }}>
-                        <Users size={13} color="#2563eb" /> {exam.studentsCount} Candidates
-                      </span>
-                    </td>
-                    <td>
-                      <StatusBadge status={exam.status} />
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
-                        {exam.status === 'Live' ? (
+                        ) : isPublished ? (
                           <span
                             style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              fontSize: '12px',
-                              color: '#dc2626',
-                              fontWeight: 600,
-                              backgroundColor: '#fef2f2',
-                              padding: '4px 8px',
-                              borderRadius: '6px'
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              padding: '3px 8px',
+                              borderRadius: '9999px',
+                              backgroundColor: '#dbeafe',
+                              color: '#1e40af',
+                              border: '1px solid #bfdbfe'
                             }}
                           >
-                            <Play size={12} fill="#dc2626" /> Supervising
-                          </span>
-                        ) : exam.status === 'Completed' ? (
-                          <span
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              fontSize: '12px',
-                              color: '#059669',
-                              backgroundColor: '#ecfdf5',
-                              padding: '4px 8px',
-                              borderRadius: '6px'
-                            }}
-                          >
-                            <CheckCircle size={12} /> Archived
+                            Published
                           </span>
                         ) : (
-                          <button type="button" className="btn btn-secondary btn-sm">
-                            <Eye size={13} /> View
-                          </button>
+                          <StatusBadge status={exam.status} />
                         )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+                          {isDraft ? (
+                            <>
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                onClick={() => handlePublish(exam.id)}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                                title="Publish Exam to Students"
+                              >
+                                <Send size={12} /> Publish
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => handleDelete(exam.id, examTitle)}
+                                style={{ color: '#dc2626', border: '1px solid #fecaca' }}
+                                title="Delete Draft"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => handleOpenResults(exam)}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                              >
+                                <Award size={13} color="var(--pt-blue-800)" /> Results
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => handleDelete(exam.id, examTitle)}
+                                style={{ color: '#94a3b8' }}
+                                title="Delete Examination"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
 
-      {/* Create Exam Modal */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title="Schedule New Examination"
-        subtitle="Configure session parameters and AI proctoring policies"
-        footer={
-          <>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => setIsModalOpen(false)}
-              disabled={isSubmitting}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={handleSubmit}
-              disabled={isSubmitting || !formData.name.trim()}
-            >
-              {isSubmitting ? 'Creating...' : 'Create Examination'}
-            </button>
-          </>
-        }
-      >
-        <form onSubmit={handleSubmit}>
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '14px' }}>
-            <div className="form-group">
-              <label className="form-label">Exam Name *</label>
-              <input
-                type="text"
-                required
-                className="form-input"
-                placeholder="e.g. Distributed Systems & Algorithms"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              />
-            </div>
+      {/* Complete Exam Creation Wizard Modal */}
+      {isWizardOpen && (
+        <CreateExamWizard
+          isOpen={isWizardOpen}
+          onClose={() => setIsWizardOpen(false)}
+          onExamCreated={handleExamCreated}
+        />
+      )}
 
-            <div className="form-group">
-              <label className="form-label">Course Code</label>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="e.g. CS402"
-                value={formData.code}
-                onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-              />
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Description / Syllabus</label>
-            <textarea
-              className="form-textarea"
-              placeholder="Provide a brief summary of topics covered..."
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            />
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
-            <div className="form-group">
-              <label className="form-label">Date</label>
-              <input
-                type="date"
-                className="form-input"
-                value={formData.date}
-                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Start Time</label>
-              <input
-                type="text"
-                className="form-input"
-                value={formData.time}
-                onChange={(e) => setFormData({ ...formData, time: e.target.value })}
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Duration (Minutes)</label>
-              <input
-                type="number"
-                min="15"
-                max="240"
-                className="form-input"
-                value={formData.duration}
-                onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
-              />
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Proctoring Enforcement Level</label>
-            <select
-              className="form-select"
-              value={formData.proctoringMode}
-              onChange={(e) => setFormData({ ...formData, proctoringMode: e.target.value })}
-            >
-              <option value="Strict AI + Live Proctor">Strict AI + Live Proctor (Highest Security)</option>
-              <option value="Strict AI">Strict AI (Standard Vision + Audio Anomaly)</option>
-              <option value="Standard AI">Standard AI (Basic Face Verification)</option>
-            </select>
-          </div>
-        </form>
-      </Modal>
+      {/* Exam Results & History Detail Modal */}
+      {selectedExamForResults && (
+        <ExamResultsModal
+          isOpen={isResultsModalOpen}
+          onClose={() => {
+            setIsResultsModalOpen(false);
+            setSelectedExamForResults(null);
+          }}
+          exam={selectedExamForResults}
+        />
+      )}
     </div>
   );
 }

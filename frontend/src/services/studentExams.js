@@ -11,7 +11,7 @@ import { getAllSessions } from './examSecurity';
  */
 export async function fetchCategorizedStudentExams(studentId) {
   const [allExams, submissions] = await Promise.all([
-    getExams().catch(() => []),
+    getExams(studentId).catch(() => []),
     getExamSubmissions(studentId).catch(() => []),
   ]);
   const localSessions = getAllSessions();
@@ -28,6 +28,9 @@ export async function fetchCategorizedStudentExams(studentId) {
   const seenExamIds = new Set();
 
   allExams.forEach((exam) => {
+    // Never show draft exams to students
+    if (exam.status?.toLowerCase() === 'draft') return;
+
     seenExamIds.add(exam.id);
     const sub = submissionMap.get(exam.id);
     const localSession = localSessions[exam.id];
@@ -75,7 +78,7 @@ export async function fetchCategorizedStudentExams(studentId) {
         isInProgress,
         autoTerminated: !!localSession?.autoTerminated,
       });
-    } else if (exam.status?.toLowerCase() === 'upcoming') {
+    } else {
       upcomingExams.push(exam);
     }
   });

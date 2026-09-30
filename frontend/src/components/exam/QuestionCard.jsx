@@ -6,7 +6,12 @@ import {
   ShieldAlert,
   Terminal,
   Check,
+  Play,
+  CheckCircle2,
+  XCircle,
+  Loader2,
 } from 'lucide-react';
+import { runSampleCode } from '../../services/api';
 
 /**
  * QuestionCard.jsx
@@ -20,8 +25,10 @@ import {
  *   selectedIndex    number | string (selected option index or written code)
  *   onSelect         (val: number | string) => void
  *   onSecurityEvent  (event: object) => void
+ *   examId           string
  */
 export default function QuestionCard({
+  examId,
   question,
   questionNumber,
   totalQuestions,
@@ -32,6 +39,9 @@ export default function QuestionCard({
   const isCoding = question.type === 'coding';
   const [selectedLang, setSelectedLang] = useState('javascript');
   const [toastMessage, setToastMessage] = useState(null);
+  const [isRunningCode, setIsRunningCode] = useState(false);
+  const [runResult, setRunResult] = useState(null);
+  const [runError, setRunError] = useState(null);
 
   // Initialize code with starter code or restored answer
   const currentCode =
@@ -460,6 +470,133 @@ export default function QuestionCard({
             <span>Tab size: 2 spaces · UTF-8</span>
             <span>{currentCode.split('\n').length} lines · {currentCode.length} chars</span>
           </div>
+        </div>
+
+        {/* ── Interactive Test Runner Bar & Terminal Output ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+              Validate your solution logic against visible sample test cases before submitting.
+            </span>
+            <button
+              type="button"
+              onClick={async () => {
+                if (!currentCode || currentCode.trim().length === 0) return;
+                setIsRunningCode(true);
+                setRunError(null);
+                try {
+                  const res = await runSampleCode(examId || question.examId || 'exam-2', question.id, currentCode, selectedLang);
+                  setRunResult(res);
+                } catch (err) {
+                  setRunError(err.message || 'Execution error');
+                } finally {
+                  setIsRunningCode(false);
+                }
+              }}
+              disabled={isRunningCode || !currentCode.trim()}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                backgroundColor: 'var(--pt-navy-800)',
+                color: '#ffffff',
+                border: 'none',
+                fontSize: '12.5px',
+                fontWeight: 700,
+                cursor: isRunningCode || !currentCode.trim() ? 'not-allowed' : 'pointer',
+                opacity: isRunningCode || !currentCode.trim() ? 0.6 : 1,
+              }}
+            >
+              {isRunningCode ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" /> Evaluating Sandbox...
+                </>
+              ) : (
+                <>
+                  <Play size={14} fill="#ffffff" /> Run Sample Test Cases
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Test Execution Output */}
+          {runError && (
+            <div
+              style={{
+                padding: '12px 16px',
+                borderRadius: '8px',
+                backgroundColor: '#fef2f2',
+                border: '1px solid #fecaca',
+                color: '#dc2626',
+                fontSize: '12.5px',
+              }}
+            >
+              <strong>Execution Error:</strong> {runError}
+            </div>
+          )}
+
+          {runResult && (
+            <div
+              style={{
+                backgroundColor: '#0a1c30',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '8px',
+                padding: '14px 16px',
+                color: '#ffffff',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Terminal size={15} color="#26c6da" />
+                  <strong style={{ fontSize: '13px', color: '#e2e8f0' }}>Sample Test Results:</strong>
+                </div>
+                <span
+                  style={{
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    backgroundColor: runResult.passed === runResult.total ? '#065f46' : '#991b1b',
+                    color: '#ffffff',
+                  }}
+                >
+                  {runResult.passed} / {runResult.total} Passed ({runResult.marksEarned || 0} pts)
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {(runResult.testCaseResults || []).map((tcr, tcIdx) => (
+                  <div
+                    key={tcIdx}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid',
+                      borderColor: tcr.passed ? 'rgba(74, 222, 128, 0.3)' : 'rgba(248, 113, 113, 0.3)',
+                      fontSize: '11.5px',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ fontWeight: 700, color: tcr.passed ? '#4ade80' : '#f87171' }}>
+                        Case #{tcIdx + 1}: {tcr.passed ? '✓ PASSED' : '✗ FAILED'}
+                      </span>
+                      <span style={{ color: '#94a3b8' }}>{tcr.passed ? `+${tcr.marks || 5} marks` : '0 marks'}</span>
+                    </div>
+                    <div style={{ color: '#cbd5e1' }}>Input: {tcr.input}</div>
+                    <div style={{ color: '#94b4cf' }}>Expected: {tcr.expectedOutput}</div>
+                    <div style={{ color: tcr.passed ? '#86efac' : '#fca5a5' }}>
+                      Output: {tcr.actualOutput !== undefined ? String(tcr.actualOutput) : '(none)'}
+                    </div>
+                    {tcr.error && <div style={{ color: '#f87171', marginTop: '2px' }}>Error: {tcr.error}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );

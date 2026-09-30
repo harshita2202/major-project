@@ -116,6 +116,11 @@ public class CandidateController {
             if (sessionResp != null) {
                 sessionId = sessionResp.getId();
             }
+        } catch (org.springframework.web.server.ResponseStatusException ex) {
+            Map<String, Object> errMap = new HashMap<>();
+            errMap.put("error", ex.getReason());
+            errMap.put("message", ex.getReason());
+            return ResponseEntity.status(ex.getStatusCode()).body(errMap);
         } catch (Exception ex) {
             System.err.println("Note: Sync exam session start: " + ex.getMessage());
         }

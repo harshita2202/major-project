@@ -10,6 +10,7 @@ import {
   ArrowRight,
   BookOpen,
   CheckCircle,
+  Lock,
 } from 'lucide-react';
 import { getCurrentUser, logout } from '../../services/auth';
 import { fetchCategorizedStudentExams } from '../../services/studentExams';
@@ -390,18 +391,46 @@ export default function StudentPortal() {
                       {exam.code}
                     </span>
 
-                    <span
-                      style={{
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        padding: '3px 10px',
-                        borderRadius: '9999px',
-                        backgroundColor: '#fef3c7',
-                        color: '#b45309',
-                      }}
-                    >
-                      Upcoming
-                    </span>
+                    {exam.windowStatus === 'UPCOMING' ? (
+                      <span
+                        style={{
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          padding: '3px 10px',
+                          borderRadius: '9999px',
+                          backgroundColor: '#fef3c7',
+                          color: '#b45309',
+                        }}
+                      >
+                        Starts at {exam.startTime || exam.time || 'Scheduled Time'}
+                      </span>
+                    ) : exam.windowStatus === 'CLOSED' ? (
+                      <span
+                        style={{
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          padding: '3px 10px',
+                          borderRadius: '9999px',
+                          backgroundColor: '#fee2e2',
+                          color: '#b91c1c',
+                        }}
+                      >
+                        Window Closed
+                      </span>
+                    ) : (
+                      <span
+                        style={{
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          padding: '3px 10px',
+                          borderRadius: '9999px',
+                          backgroundColor: '#dcfce7',
+                          color: '#15803d',
+                        }}
+                      >
+                        Available Now
+                      </span>
+                    )}
                   </div>
 
                   {/* Body */}
@@ -461,28 +490,74 @@ export default function StudentPortal() {
                     </div>
 
                     {/* Action Button */}
-                    <button
-                      type="button"
-                      onClick={() => handleStartExam(exam.id)}
-                      style={{
-                        width: '100%',
-                        padding: '11px',
-                        borderRadius: '8px',
-                        border: 'none',
-                        backgroundColor: 'var(--pt-navy-800)',
-                        color: '#ffffff',
-                        fontSize: '13.5px',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '8px',
-                        transition: 'all 0.15s ease',
-                      }}
-                    >
-                      Start Exam <ArrowRight size={15} />
-                    </button>
+                    {exam.windowStatus === 'UPCOMING' ? (
+                      <button
+                        type="button"
+                        disabled
+                        style={{
+                          width: '100%',
+                          padding: '11px',
+                          borderRadius: '8px',
+                          border: '1px solid var(--border-subtle)',
+                          backgroundColor: '#f1f5f9',
+                          color: '#64748b',
+                          fontSize: '13px',
+                          fontWeight: 700,
+                          cursor: 'not-allowed',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '8px',
+                        }}
+                      >
+                        <Lock size={14} /> Starts at {exam.startTime || exam.time}
+                      </button>
+                    ) : exam.windowStatus === 'CLOSED' ? (
+                      <button
+                        type="button"
+                        disabled
+                        style={{
+                          width: '100%',
+                          padding: '11px',
+                          borderRadius: '8px',
+                          border: '1px solid #fecaca',
+                          backgroundColor: '#fef2f2',
+                          color: '#b91c1c',
+                          fontSize: '13px',
+                          fontWeight: 700,
+                          cursor: 'not-allowed',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '8px',
+                        }}
+                      >
+                        <Lock size={14} /> Exam Window Closed
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleStartExam(exam.id)}
+                        style={{
+                          width: '100%',
+                          padding: '11px',
+                          borderRadius: '8px',
+                          border: 'none',
+                          backgroundColor: 'var(--pt-navy-800)',
+                          color: '#ffffff',
+                          fontSize: '13.5px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '8px',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        Start Exam <ArrowRight size={15} />
+                      </button>
+                    )}
                   </div>
                 </div>
               );

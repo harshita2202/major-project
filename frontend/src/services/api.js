@@ -342,8 +342,6 @@ export async function startExamAttempt(attemptData) {
     ]
   };
 
-  saveLocalActiveAttempt(localCandidate);
-
   try {
     const res = await fetch(`${API_BASE_URL}/api/candidates/start-attempt`, {
       method: 'POST',
@@ -352,12 +350,24 @@ export async function startExamAttempt(attemptData) {
     });
     if (res.ok) {
       const saved = await res.json();
+      saveLocalActiveAttempt(localCandidate);
       return normalizeCandidate(saved);
     }
+    if (res.status === 403 || res.status === 400) {
+      removeLocalActiveAttempt(attemptData.studentId);
+      const errData = await res.json().catch(() => ({}));
+      const err = new Error(errData.error || 'Access Denied: You are not assigned to this exam or the exam window is not active.');
+      err.status = res.status;
+      throw err;
+    }
   } catch (err) {
+    if (err.status === 403 || err.status === 400) {
+      throw err;
+    }
     console.warn('Backend start-attempt sync failed, using local attempt:', err);
   }
 
+  saveLocalActiveAttempt(localCandidate);
   return normalizeCandidate(localCandidate);
 }
 
@@ -429,18 +439,36 @@ export async function getCandidateById(id) {
 
 /**
  * Exams Directory API: GET /api/exams
+ * Optionally filtered by studentId for Student Portal
  */
-export async function getExams() {
+export async function getExams(studentId) {
   if (USE_MOCK_FALLBACK) {
     return [...mockExams];
   }
   try {
-    const res = await fetch(`${API_BASE_URL}/api/exams`);
+    const url = studentId
+      ? `${API_BASE_URL}/api/exams?studentId=${encodeURIComponent(studentId)}`
+      : `${API_BASE_URL}/api/exams`;
+    const res = await fetch(url);
     if (!res.ok) throw new Error('Failed to fetch exams');
     return res.json();
   } catch (err) {
     console.warn('Exams fallback:', err);
     return [...mockExams];
+  }
+}
+
+/**
+ * Get exams assigned to a specific student
+ */
+export async function getStudentExams(studentId) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/exams/student/${encodeURIComponent(studentId)}`);
+    if (!res.ok) throw new Error('Failed to fetch student exams');
+    return res.json();
+  } catch (err) {
+    console.warn('Student exams fallback:', err);
+    return getExams(studentId);
   }
 }
 
@@ -460,16 +488,30 @@ export async function getExamById(id) {
 
 /**
  * Exam Questions API: GET /api/exams/:id/questions
+ * Pass studentId to ensure security (strips correctIndex and hidden test cases)
  */
-export async function getExamQuestions(examId) {
+export async function getExamQuestions(examId, studentId, role = 'student') {
   try {
-    const res = await fetch(`${API_BASE_URL}/api/exams/${examId}/questions`);
-    if (!res.ok) throw new Error('Failed to fetch exam questions');
+    const params = new URLSearchParams();
+    if (studentId) params.append('studentId', studentId);
+    if (role) params.append('role', role);
+
+    const url = `${API_BASE_URL}/api/exams/${examId}/questions?${params.toString()}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const err = new Error(errData.error || 'Failed to fetch exam questions');
+      err.status = res.status;
+      throw err;
+    }
     const data = await res.json();
     if (Array.isArray(data) && data.length > 0) {
       return data.map(normalizeQuestion);
     }
   } catch (err) {
+    if (err.status === 403 || err.status === 400) {
+      throw err;
+    }
     console.warn('Exam questions fallback:', err);
   }
   // Fallback to local questions if examId matches or generic
@@ -480,35 +522,103 @@ export async function getExamQuestions(examId) {
 }
 
 /**
- * Create Exam API: POST /api/exams
+ * Create or Update Exam API: POST /api/exams
  */
 export async function createExam(examData) {
-  try {
-    const res = await fetch(`${API_BASE_URL}/api/exams`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(examData)
-    });
-    if (!res.ok) throw new Error('Failed to create exam');
-    return res.json();
-  } catch (err) {
-    console.warn('Create exam fallback:', err);
-    const newExam = {
-      id: `exam-${Date.now()}`,
-      code: examData.code || 'EXAM-NEW',
-      name: examData.name,
-      description: examData.description || 'Newly scheduled examination.',
-      date: examData.date,
-      time: examData.time || '10:00 AM',
-      duration: `${examData.duration} mins`,
-      studentsCount: 0,
-      status: 'upcoming',
-      proctoringMode: examData.proctoringMode || 'Strict AI',
-      type: examData.type || 'mcq'
-    };
-    mockExams.unshift(newExam);
-    return newExam;
+  const res = await fetch(`${API_BASE_URL}/api/exams`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(examData)
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to create exam');
   }
+  return data;
+}
+
+/**
+ * Publish Exam: POST /api/exams/:id/publish
+ */
+export async function publishExam(examId) {
+  const res = await fetch(`${API_BASE_URL}/api/exams/${examId}/publish`, {
+    method: 'POST'
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    const errorMsg = data.errors ? data.errors.join('\n') : (data.error || 'Failed to publish exam');
+    throw new Error(errorMsg);
+  }
+  return data;
+}
+
+/**
+ * Save Exam as Draft: POST /api/exams/:id/draft
+ */
+export async function saveExamDraft(examId) {
+  const res = await fetch(`${API_BASE_URL}/api/exams/${examId}/draft`, {
+    method: 'POST'
+  });
+  return res.json();
+}
+
+/**
+ * Delete Exam: DELETE /api/exams/:id
+ */
+export async function deleteExam(examId) {
+  const res = await fetch(`${API_BASE_URL}/api/exams/${examId}`, {
+    method: 'DELETE'
+  });
+  if (!res.ok && res.status !== 204) {
+    throw new Error('Failed to delete exam');
+  }
+  return true;
+}
+
+/**
+ * Get Assigned Students for an Exam: GET /api/exams/:id/assignments
+ */
+export async function getExamAssignments(examId) {
+  const res = await fetch(`${API_BASE_URL}/api/exams/${examId}/assignments`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
+/**
+ * Get Exam Results for Admin: GET /api/exams/:id/results
+ */
+export async function getExamResults(examId) {
+  const res = await fetch(`${API_BASE_URL}/api/exams/${examId}/results`);
+  if (!res.ok) {
+    throw new Error('Failed to fetch exam results');
+  }
+  return res.json();
+}
+
+/**
+ * Get Student Result Detail: GET /api/exams/:id/results/:studentId
+ */
+export async function getStudentExamResultDetail(examId, studentId) {
+  const res = await fetch(`${API_BASE_URL}/api/exams/${examId}/results/${encodeURIComponent(studentId)}`);
+  if (!res.ok) {
+    throw new Error('Failed to fetch student result details');
+  }
+  return res.json();
+}
+
+/**
+ * Run Student Code against Sample Test Cases: POST /api/exams/:id/run-code
+ */
+export async function runSampleCode(examId, questionId, sourceCode, language = 'javascript') {
+  const res = await fetch(`${API_BASE_URL}/api/exams/${examId}/run-code`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ questionId, sourceCode, language })
+  });
+  if (!res.ok) {
+    throw new Error('Failed to execute sample test cases');
+  }
+  return res.json();
 }
 
 /**

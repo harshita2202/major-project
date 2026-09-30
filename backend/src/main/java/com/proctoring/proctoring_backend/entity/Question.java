@@ -34,6 +34,21 @@ public class Question {
     @Column(length = 6000)
     private String starterCodeJson; // for Coding e.g. {"javascript": "...", "python": "..."}
 
+    // Extended fields for exam management
+    private Integer marks = 5;
+
+    @Column(length = 2000)
+    private String explanation;
+
+    @Column(length = 1000)
+    private String inputFormat;
+
+    @Column(length = 1000)
+    private String outputFormat;
+
+    private String allowedLanguages = "javascript,python,java";
+    private Integer orderIndex = 0;
+
     public Question() {}
 
     public Question(String id, String examId, String type, String title, String question,
@@ -50,6 +65,7 @@ public class Question {
         this.examplesJson = examplesJson;
         this.constraintsJson = constraintsJson;
         this.starterCodeJson = starterCodeJson;
+        this.marks = 5;
     }
 
     public String getId() { return id; }
@@ -84,4 +100,22 @@ public class Question {
 
     public String getStarterCodeJson() { return starterCodeJson; }
     public void setStarterCodeJson(String starterCodeJson) { this.starterCodeJson = starterCodeJson; }
+
+    public int getMarks() { return marks != null ? marks : 5; }
+    public void setMarks(Integer marks) { this.marks = marks != null ? marks : 5; }
+
+    public String getExplanation() { return explanation; }
+    public void setExplanation(String explanation) { this.explanation = explanation; }
+
+    public String getInputFormat() { return inputFormat; }
+    public void setInputFormat(String inputFormat) { this.inputFormat = inputFormat; }
+
+    public String getOutputFormat() { return outputFormat; }
+    public void setOutputFormat(String outputFormat) { this.outputFormat = outputFormat; }
+
+    public String getAllowedLanguages() { return allowedLanguages; }
+    public void setAllowedLanguages(String allowedLanguages) { this.allowedLanguages = allowedLanguages; }
+
+    public int getOrderIndex() { return orderIndex != null ? orderIndex : 0; }
+    public void setOrderIndex(Integer orderIndex) { this.orderIndex = orderIndex != null ? orderIndex : 0; }
 }

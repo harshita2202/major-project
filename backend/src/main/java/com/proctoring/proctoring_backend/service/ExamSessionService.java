@@ -6,14 +6,18 @@ import com.proctoring.proctoring_backend.dto.SessionResponse;
 import com.proctoring.proctoring_backend.dto.StartSessionRequest;
 import com.proctoring.proctoring_backend.entity.Candidate;
 import com.proctoring.proctoring_backend.entity.Exam;
+import com.proctoring.proctoring_backend.entity.ExamAssignment;
 import com.proctoring.proctoring_backend.entity.ExamSession;
 import com.proctoring.proctoring_backend.entity.ProctoringEvent;
 import com.proctoring.proctoring_backend.repository.CandidateRepository;
+import com.proctoring.proctoring_backend.repository.ExamAssignmentRepository;
 import com.proctoring.proctoring_backend.repository.ExamRepository;
 import com.proctoring.proctoring_backend.repository.ExamSessionRepository;
 import com.proctoring.proctoring_backend.repository.ProctoringEventRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -31,21 +35,67 @@ public class ExamSessionService {
     private final ExamRepository examRepository;
     private final CandidateRepository candidateRepository;
     private final ProctoringEventRepository proctoringEventRepository;
+    private final ExamAssignmentRepository examAssignmentRepository;
+    private final ExamAvailabilityService examAvailabilityService;
 
     public ExamSessionService(ExamSessionRepository examSessionRepository,
                               ExamRepository examRepository,
                               CandidateRepository candidateRepository,
-                              ProctoringEventRepository proctoringEventRepository) {
+                              ProctoringEventRepository proctoringEventRepository,
+                              ExamAssignmentRepository examAssignmentRepository,
+                              ExamAvailabilityService examAvailabilityService) {
         this.examSessionRepository = examSessionRepository;
         this.examRepository = examRepository;
         this.candidateRepository = candidateRepository;
         this.proctoringEventRepository = proctoringEventRepository;
+        this.examAssignmentRepository = examAssignmentRepository;
+        this.examAvailabilityService = examAvailabilityService;
     }
 
     @Transactional
     public SessionResponse startSession(StartSessionRequest request) {
         String examId = request.getExamId();
         String candidateId = request.getCandidateId();
+
+        // Check Exam Existence, Assignment, and Time Window
+        Optional<Exam> examOpt = examRepository.findById(examId);
+        if (examOpt.isPresent()) {
+            Exam exam = examOpt.get();
+            if ("draft".equalsIgnoreCase(exam.getStatus())) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "This exam is currently in draft state and cannot be started."
+                );
+            }
+
+            // Check assignment if assignments exist for this exam
+            List<ExamAssignment> assignments = examAssignmentRepository.findByExamId(examId);
+            if (!assignments.isEmpty()) {
+                boolean isAssigned = examAssignmentRepository.existsByExamIdAndStudentId(examId, candidateId);
+                if (!isAssigned) {
+                    throw new ResponseStatusException(
+                            HttpStatus.FORBIDDEN,
+                            "You are not assigned to take this examination."
+                    );
+                }
+            }
+
+            // Check availability window
+            ExamAvailabilityService.WindowStatus windowStatus = examAvailabilityService.getWindowStatus(exam);
+            if (windowStatus == ExamAvailabilityService.WindowStatus.UPCOMING) {
+                String startTimeMsg = exam.getStartTime() != null ? exam.getStartTime() : (exam.getTime() != null ? exam.getTime() : "scheduled start time");
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Exam has not started yet. Exam opens at " + startTimeMsg + "."
+                );
+            }
+            if (windowStatus == ExamAvailabilityService.WindowStatus.CLOSED) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "The availability window for this exam has ended."
+                );
+            }
+        }
 
         // 1. Check if candidate already has an ACTIVE session for this exam
         Optional<ExamSession> activeSessionOpt = examSessionRepository
@@ -72,7 +122,11 @@ public class ExamSessionService {
         // 3. Resolve Duration
         Integer timeRemaining = request.getTimeRemainingSeconds();
         if (timeRemaining == null || timeRemaining <= 0) {
-            timeRemaining = calculateExamDurationSeconds(examId);
+            if (examOpt.isPresent() && examOpt.get().getDurationMinutes() > 0) {
+                timeRemaining = examOpt.get().getDurationMinutes() * 60;
+            } else {
+                timeRemaining = calculateExamDurationSeconds(examId);
+            }
         }
 
         // 4. Create new ExamSession
@@ -207,7 +261,11 @@ public class ExamSessionService {
     private int calculateExamDurationSeconds(String examId) {
         Optional<Exam> examOpt = examRepository.findById(examId);
         if (examOpt.isPresent()) {
-            String durationStr = examOpt.get().getDuration();
+            Exam exam = examOpt.get();
+            if (exam.getDurationMinutes() > 0) {
+                return exam.getDurationMinutes() * 60;
+            }
+            String durationStr = exam.getDuration();
             if (durationStr != null) {
                 Matcher matcher = Pattern.compile("(\\d+)").matcher(durationStr);
                 if (matcher.find()) {
