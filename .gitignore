@@ -1,0 +1,22 @@
+# Dependencies & Build artifacts
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+target/
+**/target/
+*.class
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+
+# System & IDE files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.iml
+oracleJdk-21/
