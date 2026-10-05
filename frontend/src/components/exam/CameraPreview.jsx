@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { Camera, Video, VideoOff, RefreshCw, AlertCircle } from 'lucide-react';
+import { analyzeGazeFrame } from '../../services/gazeAnalysis';
 
 /**
  * CameraPreview.jsx
- * ProctorTrack™ candidate webcam feed component.
+ * ProctorTrackâ„¢ candidate webcam feed component.
  *
  * Supports live camera stream via navigator.mediaDevices.getUserMedia()
  * with graceful fallback to simulation/standby mode if permission is denied,
@@ -12,14 +13,17 @@ import { Camera, Video, VideoOff, RefreshCw, AlertCircle } from 'lucide-react';
  * Props:
  *   candidateName  string
  */
-export default function CameraPreview({ candidateName, isActive = true }) {
+export default function CameraPreview({ candidateName, isActive = true, onGazeEvent, gazeEnabled = true }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [streamActive, setStreamActive] = useState(false);
   const [cameraError, setCameraError] = useState(null);
   const [isStarting, setIsStarting] = useState(false);
+  const [gazeResult, setGazeResult] = useState(null);
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
+  const canvasRef = useRef(null);
+  const lastSuspiciousCallRef = useRef(0);
 
   // Stop media tracks
   const stopStream = () => {
@@ -132,6 +136,42 @@ export default function CameraPreview({ candidateName, isActive = true }) {
     }
   }, [streamActive, isExpanded]);
 
+  // Gaze Analysis Interval
+  useEffect(() => {
+    let intervalId;
+
+    if (streamActive && gazeEnabled && videoRef.current) {
+      intervalId = setInterval(async () => {
+        const video = videoRef.current;
+        if (!video || video.readyState < 2) return; // Wait for video to be ready
+
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        const base64Image = canvas.toDataURL('image/jpeg', 0.8);
+        const result = await analyzeGazeFrame(base64Image);
+
+        if (result) {
+          setGazeResult(result);
+          if (result.is_suspicious && onGazeEvent) {
+            const now = Date.now();
+            if (now - lastSuspiciousCallRef.current > 10000) { // 10 seconds debounce
+              lastSuspiciousCallRef.current = now;
+              onGazeEvent(result);
+            }
+          }
+        }
+      }, 2000);
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [streamActive, gazeEnabled, onGazeEvent]);
+
   return (
     <div
       style={{
@@ -238,6 +278,9 @@ export default function CameraPreview({ candidateName, isActive = true }) {
           overflow: 'hidden',
         }}
       >
+        {/* Hidden canvas for frame capture */}
+        <canvas ref={canvasRef} width="320" height="240" style={{ display: 'none' }} />
+
         {/* Live video element */}
         <video
           ref={videoRef}
@@ -364,33 +407,63 @@ export default function CameraPreview({ candidateName, isActive = true }) {
         style={{
           padding: '9px 16px',
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
+          flexDirection: 'column',
+          gap: '8px'
         }}
       >
-        <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 500 }}>
-          {candidateName}
-        </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <span
-            style={{
-              width: '7px',
-              height: '7px',
-              borderRadius: '50%',
-              backgroundColor: streamActive ? '#22c55e' : '#eab308',
-              display: 'inline-block',
-            }}
-          />
-          <span
-            style={{
-              fontSize: '11px',
-              color: streamActive ? '#16a34a' : '#d97706',
-              fontWeight: 700,
-            }}
-          >
-            {streamActive ? 'Biometric Stream Active' : 'Camera Ready (Standby)'}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 500 }}>
+            {candidateName}
           </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <span
+              style={{
+                width: '7px',
+                height: '7px',
+                borderRadius: '50%',
+                backgroundColor: streamActive ? '#22c55e' : '#eab308',
+                display: 'inline-block',
+              }}
+            />
+            <span
+              style={{
+                fontSize: '11px',
+                color: streamActive ? '#16a34a' : '#d97706',
+                fontWeight: 700,
+              }}
+            >
+              {streamActive ? 'Biometric Stream Active' : 'Camera Ready (Standby)'}
+            </span>
+          </div>
         </div>
+
+        {gazeEnabled && streamActive && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+              Gaze Status
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <span
+                style={{
+                  width: '7px',
+                  height: '7px',
+                  borderRadius: '50%',
+                  backgroundColor: gazeResult?.is_suspicious ? '#ef4444' : gazeResult?.gaze_direction === 'CENTER' ? '#22c55e' : '#eab308',
+                  display: 'inline-block',
+                }}
+              />
+              <span
+                style={{
+                  fontSize: '11px',
+                  color: gazeResult?.is_suspicious ? '#dc2626' : gazeResult?.gaze_direction === 'CENTER' ? '#16a34a' : '#d97706',
+                  fontWeight: 600,
+                }}
+              >
+                {gazeResult?.is_suspicious ? 'SUSPICIOUS GAZE' : gazeResult?.gaze_direction === 'CENTER' ? 'Focused' : gazeResult?.gaze_direction || 'Analyzing...'}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       <style>{`

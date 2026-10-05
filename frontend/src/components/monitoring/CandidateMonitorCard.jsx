@@ -234,6 +234,14 @@ export default function CandidateMonitorCard({ candidate, onMonitor }) {
           </span>
         </div>
 
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px' }}>
+          <span style={{ color: 'var(--text-secondary)' }}>Gaze Tracking</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 700, color: checks.gazeStatus === 'danger' ? '#dc2626' : checks.gazeStatus === 'warning' ? '#d97706' : '#059669' }}>
+            {checks.gazeStatus === 'danger' ? <AlertCircle size={13} /> : checks.gazeStatus === 'warning' ? <Eye size={13} /> : <Check size={13} />}
+            {checks.gazeTracking || 'Focused'}
+          </span>
+        </div>
+
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', borderTop: '1px dashed var(--border-subtle)', paddingTop: '6px' }}>
           <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>PEEP Risk Score</span>
           <RiskBadge level={risk} score={riskScore} />

@@ -445,6 +445,17 @@ export default function StudentExam() {
     });
   }, [examId, examMeta.candidateId, examMeta.candidateName, currentUser?.userId, currentUser?.name, handleAutoTerminate]);
 
+  // ── Gaze Detection Event Handler ──────────────────────────────────────────
+  const handleGazeEvent = useCallback((gazeData) => {
+    if (phaseRef.current !== PHASE.ACTIVE) return;
+    const gazeEvent = createSecurityEvent(
+      SECURITY_EVENT_TYPE.GAZE_WARNING,
+      SECURITY_SEVERITY.MEDIUM,
+      `Suspicious gaze detected: ${gazeData.gaze_direction} (score: ${(gazeData.suspicion_score * 100).toFixed(0)}%)`
+    );
+    handleSecurityEvent(gazeEvent);
+  }, [handleSecurityEvent]);
+
   // ── WebSocket live session listener (for instant auto-submit from backend) ──
   useEffect(() => {
     if (phase !== PHASE.ACTIVE || !sessionId) return;
@@ -1752,7 +1763,12 @@ export default function StudentExam() {
 
           {/* RIGHT: Sidebar panels */}
           <aside style={styles.sidePanel}>
-            <CameraPreview candidateName={examMeta.candidateName} isActive={phase === PHASE.ACTIVE} />
+            <CameraPreview
+              candidateName={examMeta.candidateName}
+              isActive={phase === PHASE.ACTIVE}
+              onGazeEvent={handleGazeEvent}
+              gazeEnabled={phase === PHASE.ACTIVE}
+            />
             <QuestionNavigator
               totalQuestions={questions.length}
               currentIndex={currentIndex}
