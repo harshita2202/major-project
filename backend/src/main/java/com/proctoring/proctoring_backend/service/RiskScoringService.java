@@ -67,14 +67,14 @@ public class RiskScoringService {
     public int getEventPoints(String eventType) {
         if (eventType == null) return 10;
         return switch (eventType.trim().toUpperCase()) {
-            case "NETWORK_INTERRUPTION", "NETWORK_DISCONNECTION", "NETWORK" -> 5;
+            case "NETWORK_INTERRUPTION", "NETWORK_DISCONNECTION", "NETWORK" -> 3;
             case "LONG_INACTIVITY", "INACTIVITY" -> 5;
-            case "GAZE_WARNING", "GAZE" -> 10;
-            case "SHORTCUT_ATTEMPT", "KEYBOARD_SHORTCUT", "KEYBOARD_SHORTCUT_ATTEMPT" -> 10;
-            case "FULLSCREEN_EXIT" -> 15;
-            case "TAB_SWITCH" -> 20;
-            case "COPY_ATTEMPT", "COPY", "CUT_ATTEMPT", "CUT" -> 25;
-            case "PASTE_ATTEMPT", "PASTE", "CLIPBOARD_PASTE_ATTEMPT" -> 25;
+            case "GAZE_WARNING", "GAZE" -> 8;
+            case "SHORTCUT_ATTEMPT", "KEYBOARD_SHORTCUT", "KEYBOARD_SHORTCUT_ATTEMPT" -> 5;
+            case "FULLSCREEN_EXIT" -> 10;
+            case "TAB_SWITCH" -> 15;
+            case "COPY_ATTEMPT", "COPY", "CUT_ATTEMPT", "CUT" -> 20;
+            case "PASTE_ATTEMPT", "PASTE", "CLIPBOARD_PASTE_ATTEMPT" -> 20;
             default -> 10;
         };
     }

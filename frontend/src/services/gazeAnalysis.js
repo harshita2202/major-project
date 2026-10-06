@@ -3,7 +3,6 @@ export const GAZE_API_URL = import.meta.env.VITE_GAZE_API_URL || 'http://localho
 export const analyzeGazeFrame = async (base64ImageData) => {
   try {
     const base64Data = base64ImageData.replace(/^data:image\/jpeg;base64,/, '');
-    const base64Data = base64ImageData.replace(/^data:image\/jpeg;base64,/, ');
     const response = await fetch(`${GAZE_API_URL}/analyze`, {
       method: 'POST',
       headers: {
