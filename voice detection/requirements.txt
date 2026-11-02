@@ -1,0 +1,16 @@
+# Python 3.10+
+#
+# GPU (optional): install the CUDA build of torch FIRST, e.g.
+#   pip install torch==2.5.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu124
+# then `pip install -r requirements.txt` (pip keeps the already-installed CUDA wheels).
+torch>=2.1,<2.9
+torchaudio>=2.1,<2.9
+speechbrain>=1.0.0,<1.1
+huggingface_hub>=0.20,<1.0
+numpy>=1.24
+soundfile>=0.12
+fastapi>=0.110
+uvicorn[standard]>=0.27
+python-multipart>=0.0.9
+pydantic>=2.5
+pyyaml>=6.0

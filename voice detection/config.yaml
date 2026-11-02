@@ -1,0 +1,57 @@
+# ---------------------------------------------------------------------------
+# Multi-voice detection — single source of truth for every threshold/timing.
+# Override the path with the env var VOICEGUARD_CONFIG=/path/to/other.yaml
+# ---------------------------------------------------------------------------
+
+audio:
+  sample_rate: 16000          # Hz. Everything is resampled to this.
+  client_chunk_ms: 250        # Size of PCM chunks the browser sends over the WS.
+
+models:
+  device: auto                # auto | cpu | cuda
+  vad_repo: snakers4/silero-vad
+  embedding_source: speechbrain/spkrec-ecapa-voxceleb
+  model_cache_dir: pretrained_models   # where SpeechBrain stores the ECAPA weights
+
+vad:
+  threshold: 0.5              # Silero speech probability above which a 32 ms frame counts as speech
+  frame_samples: 512          # Silero v5 requires 512 samples @ 16 kHz
+  min_speech_ms: 250          # (enrollment) drop speech islands shorter than this
+  min_silence_ms: 100         # (enrollment) merge gaps shorter than this
+  speech_pad_ms: 30           # (enrollment) padding around speech islands
+
+enrollment:
+  target_duration_sec: 20     # How long the UI records
+  min_speech_sec: 8.0         # Reject enrollment if less speech than this remains after VAD
+  min_segments: 6             # ...or fewer than this many 2 s segments
+  segment_sec: 2.0
+  segment_overlap: 0.5        # 50 % overlap -> 1 s hop
+  leave_one_out: true         # Self-similarity: compare each segment to the mean of the OTHERS (unbiased)
+  threshold_std_factor: 3.0   # threshold = clip(mean - k*std, min, max)
+  threshold_min: 0.25
+  threshold_max: 0.55
+
+monitoring:
+  window_sec: 2.0             # Sliding analysis window
+  hop_sec: 1.0                # Evaluate every hop
+  min_speech_ratio: 0.40      # Skip windows with less speech than this
+  strikes_to_warn: 3          # Consecutive low-similarity windows before a warning
+  reset_strikes_on_match: true  # A matching window resets the strike counter
+  max_strike_gap_sec: 4.0     # Strikes further apart than this (e.g. separated by silence) don't count as consecutive
+  cooldown_sec: 10.0          # Minimum gap between warnings
+  threshold_offset: 0.0       # Added to the enrolled threshold (positive = stricter, negative = fewer false alarms)
+  silent_mic_sec: 15.0        # Notify the client if the mic has been dead-silent for this long
+  silent_rms_dbfs: -60.0      # RMS below this is considered a dead/muted mic
+
+logging:
+  clip_dir: warning_clips     # Warning clips (the ONLY raw audio ever written to disk)
+  clip_pre_sec: 4.0           # Seconds of audio saved per warning clip (ending at the trigger)
+  max_events_per_session: 2000
+  delete_clips_on_end: false  # true = also delete this session's warning clips when the test ends
+
+server:
+  host: 0.0.0.0
+  port: 8000
+  cors_origins: ["*"]
+  session_idle_timeout_sec: 7200   # Sessions not touched for this long are purged
+  max_upload_mb: 20

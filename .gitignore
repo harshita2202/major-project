@@ -25,3 +25,9 @@ oracleJdk-21/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.venv/
+**/.venv/
+
+# Large model files
+pretrained_models/
+**/pretrained_models/

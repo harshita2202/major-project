@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VoiceGuard · Exam Voice Verification</title>
+  <meta name="description" content="Real-time voice verification for online exams: enroll your voice, then VoiceGuard confirms only you are speaking during the test." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="bg-orbs" aria-hidden="true"><span></span><span></span><span></span></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7c5cff"/><stop offset="1" stop-color="#22d3ee"/></linearGradient></defs>
+        <path d="M16 2 4 7v8c0 7.4 5.1 13.4 12 15 6.9-1.6 12-7.6 12-15V7L16 2Z" fill="url(#g1)" opacity=".95"/>
+        <g stroke="#0b0d17" stroke-width="2.2" stroke-linecap="round"><path d="M10 14v4"/><path d="M13.5 11v10"/><path d="M17 13v6"/><path d="M20.5 10v12"/><path d="M24 14.5v3"/></g>
+      </svg>
+      <span>Voice<b>Guard</b></span>
+    </div>
+    <ol class="steps" aria-label="Progress">
+      <li id="step-consent" class="active">Consent</li>
+      <li id="step-enroll">Voice enrollment</li>
+      <li id="step-test">Exam</li>
+    </ol>
+    <div id="server-pill" class="pill pill-muted" title="Backend status"><i></i><span>Connecting…</span></div>
+  </header>
+
+  <main>
+    <!-- ============================ CONSENT ============================ -->
+    <section id="screen-consent" class="screen active" aria-labelledby="consent-title">
+      <div class="card glass narrow">
+        <div class="icon-badge" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/></svg>
+        </div>
+        <h1 id="consent-title">Microphone &amp; voice processing consent</h1>
+        <p class="lead">To keep this exam fair, VoiceGuard verifies that only <b>you</b> are speaking while you take the test.</p>
+        <ul class="consent-list">
+          <li><b>What we capture:</b> your microphone audio during enrollment (~20 s) and throughout the exam.</li>
+          <li><b>How it's used:</b> audio is analysed in real time to compute a numeric voice profile. Raw audio is <em>not</em> stored.</li>
+          <li><b>Exception:</b> when another voice is detected, a short clip (a few seconds) is saved as evidence for the proctor.</li>
+          <li><b>Retention:</b> your voice profile and session data are deleted from memory as soon as the exam ends.</li>
+        </ul>
+        <label class="check">
+          <input type="checkbox" id="consent-checkbox" />
+          <span>I understand and consent to microphone access and voice verification for this exam.</span>
+        </label>
+        <div class="actions">
+          <button id="consent-accept" class="btn btn-primary" disabled>Agree &amp; continue</button>
+        </div>
+        <p id="consent-error" class="alert alert-error hidden" role="alert"></p>
+      </div>
+    </section>
+
+    <!-- ============================ ENROLLMENT ============================ -->
+    <section id="screen-enroll" class="screen" aria-labelledby="enroll-title">
+      <div class="card glass wide enroll-grid">
+        <div class="enroll-left">
+          <h2 id="enroll-title">Create your voice profile</h2>
+          <p class="muted">Press <b>Record</b> and read the paragraph below aloud in your normal speaking voice. Recording stops automatically after <span id="enroll-duration">20</span> seconds.</p>
+          <blockquote id="enroll-paragraph" class="paragraph">
+            When the sunlight strikes raindrops in the air, they act as a prism and form a rainbow.
+            The rainbow is a division of white light into many beautiful colours. These take the shape
+            of a long round arch, with its path high above, and its two ends apparently beyond the horizon.
+            There is, according to legend, a boiling pot of gold at one end. People look, but no one ever
+            finds it. When a man looks for something beyond his reach, his friends say he is looking for
+            the pot of gold at the end of the rainbow.
+          </blockquote>
+          <ul class="tips">
+            <li>Sit in a quiet room, about an arm's length from the mic.</li>
+            <li>Speak at the volume you'll use during the exam.</li>
+            <li>Make sure nobody else talks while you record.</li>
+          </ul>
+        </div>
+
+        <div class="enroll-right">
+          <div class="recorder" id="recorder" data-state="idle">
+            <svg class="ring" viewBox="0 0 200 200" aria-hidden="true">
+              <defs><linearGradient id="g2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7c5cff"/><stop offset="1" stop-color="#22d3ee"/></linearGradient></defs>
+              <circle class="ring-bg" cx="100" cy="100" r="88"/>
+              <circle id="ring-progress" class="ring-fg" cx="100" cy="100" r="88"/>
+            </svg>
+            <button id="record-btn" class="record-btn" aria-label="Start recording">
+              <span class="record-dot"></span>
+            </button>
+            <div id="countdown" class="countdown" aria-live="assertive"></div>
+          </div>
+          <div id="enroll-timer" class="timer mono">0.0 s</div>
+          <canvas id="enroll-meter" class="meter" width="320" height="56" aria-label="Microphone level"></canvas>
+          <p id="enroll-status" class="status-text" aria-live="polite">Ready when you are.</p>
+          <p id="enroll-error" class="alert alert-error hidden" role="alert"></p>
+          <div id="enroll-result" class="alert alert-ok hidden" role="status"></div>
+          <div class="actions">
+            <button id="enroll-retry" class="btn btn-ghost hidden">Record again</button>
+            <button id="start-test" class="btn btn-primary hidden">Start exam</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ TEST ============================ -->
+    <section id="screen-test" class="screen" aria-labelledby="test-title">
+      <div id="warning-banner" class="warning-banner" role="alert" aria-live="assertive">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>
+        <div><b>Warning: another voice detected.</b> <span>Please make sure you are alone and not talking with anyone.</span></div>
+        <button id="dismiss-warning" class="btn btn-small btn-ghost" aria-label="Dismiss warning">Dismiss</button>
+      </div>
+
+      <div class="test-grid">
+        <div class="card glass status-card">
+          <h2 id="test-title" class="sr-only">Exam voice monitor</h2>
+          <div id="status" class="status status-checking" aria-live="polite">
+            <div class="status-orb"><span></span><span></span><span></span></div>
+            <div class="status-label">
+              <small>Voice status</small>
+              <strong id="status-text">Checking…</strong>
+            </div>
+          </div>
+          <div class="kpis">
+            <div class="kpi"><small>Similarity</small><b id="kpi-sim" class="mono">—</b></div>
+            <div class="kpi"><small>Threshold</small><b id="kpi-thr" class="mono">—</b></div>
+            <div class="kpi"><small>Speech</small><b id="kpi-speech" class="mono">—</b></div>
+            <div class="kpi"><small>Warnings</small><b id="kpi-warn" class="mono">0</b></div>
+          </div>
+          <div class="strikes" aria-label="Strike counter"><small>Strikes</small><div id="strike-dots"></div></div>
+          <div class="conn-row">
+            <div id="ws-pill" class="pill pill-muted"><i></i><span>Offline</span></div>
+            <div id="mic-pill" class="pill pill-muted"><i></i><span>Mic idle</span></div>
+            <canvas id="test-meter" class="meter small" width="160" height="28" aria-label="Microphone level"></canvas>
+          </div>
+          <p id="test-notice" class="alert alert-warn hidden" role="status"></p>
+          <div class="actions">
+            <button id="end-test" class="btn btn-danger">End exam</button>
+          </div>
+        </div>
+
+        <div class="card glass exam-card">
+          <h3>Exam in progress</h3>
+          <p class="muted">This panel represents your exam content. Answer questions as normal — VoiceGuard runs quietly in the background.</p>
+          <div class="question">
+            <small>Question 1 of 20</small>
+            <p>Explain, in your own words, why the sky appears blue during the day and red at sunset.</p>
+            <textarea id="answer" rows="5" placeholder="Type your answer…"></textarea>
+          </div>
+        </div>
+
+        <div class="card glass debug-card">
+          <div class="debug-head">
+            <h3>Live similarity <span class="tag">debug</span></h3>
+            <span class="muted mono" id="latency">— ms</span>
+          </div>
+          <canvas id="sim-chart" class="chart" width="900" height="220" aria-label="Similarity over time"></canvas>
+          <div class="legend"><span class="lg lg-match">match</span><span class="lg lg-mismatch">below threshold</span><span class="lg lg-warn">warning</span><span class="lg lg-thr">threshold</span></div>
+          <h3 class="mt">Event log</h3>
+          <ul id="event-log" class="event-log mono"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ SUMMARY ============================ -->
+    <section id="screen-summary" class="screen" aria-labelledby="summary-title">
+      <div class="card glass narrow">
+        <h2 id="summary-title">Exam finished</h2>
+        <p class="muted">Your voice profile and session data have been deleted from the server.</p>
+        <div class="kpis" id="summary-kpis"></div>
+        <ul id="summary-warnings" class="event-log mono"></ul>
+        <div class="actions"><button id="restart" class="btn btn-ghost">Start over</button></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="./app.js" type="module"></script>
+</body>
+</html>
