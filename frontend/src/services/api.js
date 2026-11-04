@@ -21,7 +21,14 @@ import {
   CODING_QUESTIONS
 } from '../data/mockExamData.js';
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+function getApiBaseUrl() {
+  if (typeof window !== 'undefined' && window.location && window.location.origin) {
+    return window.location.origin;
+  }
+  return import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+}
+
+export const API_BASE_URL = getApiBaseUrl();
 
 // Live mode connected to Spring Boot backend
 const USE_MOCK_FALLBACK = false;

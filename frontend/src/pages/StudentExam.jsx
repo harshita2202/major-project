@@ -22,6 +22,7 @@ import QuestionNavigator from '../components/exam/QuestionNavigator';
 import SecurityViolationModal from '../components/exam/SecurityViolationModal';
 import NetworkInterruptionBanner from '../components/exam/NetworkInterruptionBanner';
 import CameraPreview from '../components/exam/CameraPreview';
+import MobileCameraPanel from '../components/exam/MobileCameraPanel';
 import { subscribeToSessionEvents } from '../services/websocket';
 
 import {
@@ -1768,6 +1769,13 @@ export default function StudentExam() {
               isActive={phase === PHASE.ACTIVE}
               onGazeEvent={handleGazeEvent}
               gazeEnabled={phase === PHASE.ACTIVE}
+            />
+            <MobileCameraPanel
+              sessionId={sessionId}
+              examId={examId}
+              candidateId={examMeta.candidateId || currentUser?.userId || 'STU001'}
+              candidateName={examMeta.candidateName || currentUser?.name || 'Candidate'}
+              isActive={phase === PHASE.ACTIVE}
             />
             <QuestionNavigator
               totalQuestions={questions.length}

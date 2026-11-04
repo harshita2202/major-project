@@ -204,7 +204,7 @@ export default function CameraPreview({ candidateName, isActive = true, onGazeEv
               textTransform: 'uppercase',
             }}
           >
-            Camera Feed
+            Primary Camera – Laptop Webcam
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -327,18 +327,46 @@ export default function CameraPreview({ candidateName, isActive = true, onGazeEv
               {isStarting ? 'Connecting camera...' : 'Webcam Standby'}
             </div>
             {cameraError ? (
-              <div
-                style={{
-                  fontSize: '10.5px',
-                  color: '#f87171',
-                  marginTop: '4px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '4px',
-                }}
-              >
-                <AlertCircle size={11} /> {cameraError}
+              <div style={{ marginTop: '6px' }}>
+                <div
+                  style={{
+                    fontSize: '11px',
+                    color: '#f87171',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '4px',
+                    lineHeight: 1.3,
+                  }}
+                >
+                  <AlertCircle size={12} style={{ flexShrink: 0 }} />
+                  <span>{cameraError}</span>
+                </div>
+                <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', marginTop: '4px', lineHeight: 1.3 }}>
+                  Click lock or camera icon in address bar, set to <strong>Allow</strong>, then retry.
+                </div>
+                <button
+                  type="button"
+                  onClick={startStream}
+                  disabled={isStarting}
+                  style={{
+                    marginTop: '8px',
+                    padding: '4px 12px',
+                    backgroundColor: 'rgba(38, 198, 218, 0.15)',
+                    border: '1px solid rgba(38, 198, 218, 0.4)',
+                    borderRadius: '6px',
+                    color: '#26c6da',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    cursor: isStarting ? 'wait' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                >
+                  <RefreshCw size={11} className={isStarting ? 'spin' : ''} />
+                  {isStarting ? 'Requesting...' : 'Retry Camera Access'}
+                </button>
               </div>
             ) : (
               <div style={{ fontSize: '10px', color: 'rgba(142,174,201,0.6)', marginTop: '2px' }}>

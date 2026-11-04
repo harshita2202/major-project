@@ -165,6 +165,20 @@
 
 ---
 
+### 10. Dual-Camera Proctoring (Laptop + Mobile Camera)
+- **Session-Specific Mobile Pairing**:
+  - Secure QR code & pairing link generation via backend `POST /api/mobile-pairing/generate` and `MobilePairingToken` entity.
+  - Candidate scans QR on smartphone to open responsive mobile web app (`/mobile-camera?token=...`).
+  - No app installation required; runs natively in modern mobile browsers with rear-camera default and camera switch capabilities.
+- **Real-Time WebRTC P2P Video Transmission**:
+  - WebRTC signaling relayed through Spring Boot WebSocket STOMP endpoints (`/app/webrtc/{sessionId}/*` and `/topic/webrtc/{sessionId}/*`).
+  - Automatic reconnection handling, graceful degradation, and live connection telemetry.
+- **Dual-Feed Examination & Proctor Interfaces**:
+  - **Candidate Interface ([`StudentExam.jsx`](file:///c:/Major/frontend/src/pages/StudentExam.jsx))**: Shows both `Primary Camera – Laptop Webcam` and `Secondary Camera – Mobile Phone` feeds with clear connection status badges and QR code pairing.
+  - **Proctor Dashboard ([`CandidateDetailModal.jsx`](file:///c:/Major/frontend/src/components/monitoring/CandidateDetailModal.jsx))**: Invigilators can view both laptop and mobile camera feeds simultaneously in dual-camera inspection mode with disconnect alerts and session telemetry.
+
+---
+
 ## 📁 Project Directory Structure
 ```
 Major/

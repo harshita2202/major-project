@@ -1,4 +1,6 @@
-export const GAZE_API_URL = import.meta.env.VITE_GAZE_API_URL || 'http://localhost:5001';
+export const GAZE_API_URL = typeof window !== 'undefined'
+  ? `${window.location.origin}/gaze-api`
+  : (import.meta.env.VITE_GAZE_API_URL || 'http://localhost:5001');
 
 export const analyzeGazeFrame = async (base64ImageData) => {
   try {

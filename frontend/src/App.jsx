@@ -9,6 +9,7 @@ import InvigilatorLogin from './pages/auth/InvigilatorLogin';
 import StudentPortal from './pages/student/StudentPortal';
 import AttemptedExams from './pages/student/AttemptedExams';
 import StudentExam from './pages/StudentExam';
+import MobileCameraPage from './pages/MobileCameraPage';
 
 // Invigilator Pages & Layout
 import AppLayout from './components/layout/AppLayout';
@@ -27,10 +28,11 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* ── Public Landing & Login Routes ── */}
+        {/* ── Public Landing, Login & Mobile Camera Routes ── */}
         <Route path="/" element={<Home />} />
         <Route path="/student-login" element={<StudentLogin />} />
         <Route path="/invigilator-login" element={<InvigilatorLogin />} />
+        <Route path="/mobile-camera" element={<MobileCameraPage />} />
 
         {/* ── Student Protected Experience ── */}
         <Route element={<ProtectedRoute allowedRole={ROLES.STUDENT} />}>
