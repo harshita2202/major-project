@@ -414,6 +414,17 @@ def _load_model(weights_path: Path, device: torch.device) -> L2CS:
         print(f"[gaze_model] Ignored unexpected keys: {result.unexpected_keys}")
     if result.missing_keys:
         print(f"[gaze_model] WARNING — missing keys: {result.missing_keys}")
+        required_heads = {
+            "fc_yaw_gaze.weight",
+            "fc_yaw_gaze.bias",
+            "fc_pitch_gaze.weight",
+            "fc_pitch_gaze.bias",
+        }
+        missing_heads = required_heads.intersection(result.missing_keys)
+        if missing_heads:
+            raise RuntimeError(
+                f"Checkpoint is missing required L2CS gaze head weights: {missing_heads}"
+            )
 
     model.to(device)
     model.eval()

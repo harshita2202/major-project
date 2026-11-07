@@ -13,7 +13,7 @@ import {
   Lock,
 } from 'lucide-react';
 import { getCurrentUser, logout } from '../../services/auth';
-import { fetchCategorizedStudentExams } from '../../services/studentExams';
+import { fetchCategorizedStudentExams, createFreshModelTestExam } from '../../services/studentExams';
 
 export default function StudentPortal() {
   const navigate = useNavigate();
@@ -22,6 +22,7 @@ export default function StudentPortal() {
   const [upcomingExams, setUpcomingExams] = useState([]);
   const [attemptedCount, setAttemptedCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [creatingTestExam, setCreatingTestExam] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -51,6 +52,21 @@ export default function StudentPortal() {
 
   const handleStartExam = (examId) => {
     navigate(`/student/exam/${examId}`);
+  };
+
+  const handleCreateTestExam = async () => {
+    if (creatingTestExam) return;
+    setCreatingTestExam(true);
+    try {
+      const freshExam = await createFreshModelTestExam(user.userId);
+      if (freshExam && freshExam.id) {
+        setUpcomingExams((prev) => [freshExam, ...prev]);
+      }
+    } catch (err) {
+      console.warn('Failed to create test exam:', err);
+    } finally {
+      setCreatingTestExam(false);
+    }
   };
 
   return (
@@ -278,7 +294,7 @@ export default function StudentPortal() {
         </div>
 
         {/* Section Heading */}
-        <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
           <div>
             <h2 style={{ fontSize: '19px', fontWeight: 800, color: 'var(--pt-navy-900)', margin: '0 0 2px' }}>
               Upcoming Examinations
@@ -287,6 +303,28 @@ export default function StudentPortal() {
               Scheduled assessments ready for candidate ID {user.userId}
             </p>
           </div>
+
+          <button
+            type="button"
+            onClick={handleCreateTestExam}
+            disabled={creatingTestExam}
+            style={{
+              padding: '9px 16px',
+              borderRadius: '8px',
+              border: '1px solid rgba(38, 198, 218, 0.45)',
+              backgroundColor: '#0a1c30',
+              color: '#26c6da',
+              fontSize: '12.5px',
+              fontWeight: 700,
+              cursor: creatingTestExam ? 'wait' : 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: 'var(--shadow-sm)',
+            }}
+          >
+            {creatingTestExam ? 'Creating Test Exam...' : '+ Generate New Test Exam'}
+          </button>
         </div>
 
         {/* Exam Cards Grid */}

@@ -129,10 +129,26 @@ def estimate_head_pose(
     rmat, _ = cv2.Rodrigues(rvec)
     angles = _rotation_matrix_to_euler(rmat)
 
+    raw_pitch = float(np.degrees(angles[0]))
+    if raw_pitch > 90.0:
+        norm_pitch = 180.0 - raw_pitch
+    elif raw_pitch < -90.0:
+        norm_pitch = -180.0 - raw_pitch
+    else:
+        norm_pitch = raw_pitch
+
+    raw_roll = float(np.degrees(angles[2]))
+    if raw_roll > 90.0:
+        norm_roll = 180.0 - raw_roll
+    elif raw_roll < -90.0:
+        norm_roll = -180.0 - raw_roll
+    else:
+        norm_roll = raw_roll
+
     return HeadPose(
         yaw=float(np.degrees(angles[1])),
-        pitch=float(np.degrees(angles[0])),
-        roll=float(np.degrees(angles[2])),
+        pitch=norm_pitch,
+        roll=norm_roll,
     )
 
 

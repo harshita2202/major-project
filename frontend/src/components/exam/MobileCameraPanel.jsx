@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Smartphone, QrCode, Wifi, WifiOff, RotateCcw, CheckCircle2, AlertCircle, Copy, Check } from 'lucide-react';
+import { Smartphone, QrCode, Wifi, WifiOff, RotateCcw, AlertCircle, Copy, Check } from 'lucide-react';
 import {
   generateMobilePairingToken,
   LaptopMobileWebRTC,
@@ -33,7 +33,6 @@ export default function MobileCameraPanel({
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState(null);
   const [qrDataUrl, setQrDataUrl] = useState(null);
-  const [isExpanded, setIsExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const videoRef = useRef(null);
@@ -248,20 +247,6 @@ export default function MobileCameraPanel({
               {isGenerating ? 'Generating...' : 'Refresh QR'}
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => setIsExpanded((p) => !p)}
-            style={{
-              fontSize: '10.5px',
-              color: 'var(--text-muted)',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              fontWeight: 600,
-            }}
-          >
-            {isExpanded ? 'Minimize' : 'Expand'}
-          </button>
         </div>
       </div>
 
@@ -270,19 +255,21 @@ export default function MobileCameraPanel({
         style={{
           position: 'relative',
           backgroundColor: '#0a1c30',
-          aspectRatio: isExpanded ? '4/3' : '16/9',
+          aspectRatio: '16/9',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           overflow: 'hidden',
         }}
       >
-        {/* Live mobile video */}
+        {/* Live mobile video (PiP & fullscreen disabled so browser overlay cannot steal focus) */}
         <video
           ref={videoRef}
           playsInline
           autoPlay
           muted
+          disablePictureInPicture
+          controlsList="nodownload nofullscreen noremoteplayback"
           onLoadedMetadata={(e) => {
             e.target.play().catch(() => {});
           }}
@@ -290,6 +277,7 @@ export default function MobileCameraPanel({
             width: '100%',
             height: '100%',
             objectFit: 'cover',
+            pointerEvents: 'none',
             display: mobileConnected && webrtcState === 'connected' ? 'block' : 'none',
           }}
         />
@@ -342,7 +330,7 @@ export default function MobileCameraPanel({
                   <img
                     src={qrDataUrl}
                     alt="Mobile camera pairing QR code"
-                    style={{ width: isExpanded ? '140px' : '95px', height: isExpanded ? '140px' : '95px' }}
+                    style={{ width: '95px', height: '95px' }}
                   />
                 </div>
                 <div style={{ textAlign: 'center' }}>

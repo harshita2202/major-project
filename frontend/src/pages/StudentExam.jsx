@@ -423,9 +423,10 @@ export default function StudentExam() {
         return;
       }
 
-      // Feature-specific warning returned from backend
-      if (res.warningMessage) {
-        setActiveWarningMessage(res.warningMessage);
+      // Feature-specific warning returned from backend or event-specific message
+      const displayWarning = event.customWarning || res.warningMessage || event.message;
+      if (displayWarning && event.severity !== SECURITY_SEVERITY.INFO) {
+        setActiveWarningMessage(displayWarning);
         setIsMediumWarning(false);
         setActiveViolationType(event.type);
         setShowViolationModal(true);
@@ -437,10 +438,15 @@ export default function StudentExam() {
       }
     }).catch((err) => {
       console.warn('Backend event evaluation notice:', err);
-      if (event.type === SECURITY_EVENT_TYPE.FULLSCREEN_EXIT) {
-        setActiveWarningMessage('Do not exit fullscreen. Repeated violations may result in automatic exam submission.');
+      const fallbackWarning =
+        event.customWarning ||
+        (event.type === SECURITY_EVENT_TYPE.FULLSCREEN_EXIT
+          ? 'Do not exit fullscreen. Repeated violations may result in automatic exam submission.'
+          : event.message);
+      if (fallbackWarning && event.severity !== SECURITY_SEVERITY.INFO) {
+        setActiveWarningMessage(fallbackWarning);
         setIsMediumWarning(false);
-        setActiveViolationType('FULLSCREEN_EXIT');
+        setActiveViolationType(event.type);
         setShowViolationModal(true);
       }
     });
@@ -449,11 +455,21 @@ export default function StudentExam() {
   // ── Gaze Detection Event Handler ──────────────────────────────────────────
   const handleGazeEvent = useCallback((gazeData) => {
     if (phaseRef.current !== PHASE.ACTIVE) return;
-    const gazeEvent = createSecurityEvent(
-      SECURITY_EVENT_TYPE.GAZE_WARNING,
-      SECURITY_SEVERITY.MEDIUM,
-      `Suspicious gaze detected: ${gazeData.gaze_direction} (score: ${(gazeData.suspicion_score * 100).toFixed(0)}%)`
-    );
+    const dir = gazeData?.gaze_direction || 'AWAY';
+    let detailMsg = `Suspicious gaze detected (${dir}) — Please keep your attention on the exam screen.`;
+    if (dir === 'NO_FACE') {
+      detailMsg = 'No face detected in the camera! Please keep your face clearly visible in front of the webcam.';
+    } else if (dir === 'MULTIPLE_FACES') {
+      detailMsg = 'Multiple faces detected in the camera frame! Only the registered candidate is allowed during the exam.';
+    }
+    const gazeEvent = {
+      ...createSecurityEvent(
+        SECURITY_EVENT_TYPE.GAZE_WARNING,
+        SECURITY_SEVERITY.MEDIUM,
+        detailMsg
+      ),
+      customWarning: detailMsg,
+    };
     handleSecurityEvent(gazeEvent);
   }, [handleSecurityEvent]);
 
@@ -1766,6 +1782,7 @@ export default function StudentExam() {
           <aside style={styles.sidePanel}>
             <CameraPreview
               candidateName={examMeta.candidateName}
+              sessionId={sessionId || examMeta.candidateId}
               isActive={phase === PHASE.ACTIVE}
               onGazeEvent={handleGazeEvent}
               gazeEnabled={phase === PHASE.ACTIVE}

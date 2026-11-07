@@ -2,19 +2,130 @@ import { useState, useEffect, useRef } from 'react';
 import { Camera, Video, VideoOff, RefreshCw, AlertCircle } from 'lucide-react';
 import { analyzeGazeFrame } from '../../services/gazeAnalysis';
 
+const STARTUP_GRACE_MS = 6000; // 6s initial warm-up when exam/camera starts
+const WARNING_COOLDOWN_MS = 10000; // 10s cooldown between gaze warnings
+const CONSECUTIVE_AWAY_THRESHOLD = 2; // Require 2 consecutive off-screen checks (~4s)
+const CONSECUTIVE_NO_FACE_THRESHOLD = 2; // Require 2 consecutive missing-face checks (~4s)
+
+/**
+ * Normalizes OpenCV solvePnP pitch angle (which can wrap around +/-180 deg
+ * when the 3D face model Y-axis is inverted relative to image coordinates).
+ */
+function normalizeHeadPitch(rawPitch) {
+  if (typeof rawPitch !== 'number' || Number.isNaN(rawPitch)) return 0;
+  if (rawPitch > 90) return 180 - rawPitch;
+  if (rawPitch < -90) return -180 - rawPitch;
+  return rawPitch;
+}
+
+/**
+ * Computes screen-relative gaze direction from L2CS-Net Gaze360 (yaw_deg, pitch_deg).
+ * On a top-mounted laptop webcam:
+ * - Looking at the laptop screen corresponds to pitch in [-38°, +18°]
+ *   (negative pitch = downward from top bezel toward screen).
+ * - Looking below the screen (desk/lap/phone) has pitch < -38°.
+ * - Looking above the monitor has pitch > +18°.
+ * - Horizontal screen span corresponds to yaw in [-26°, +26°].
+ */
+function computeScreenDirection(yawDeg, pitchDeg, fallbackDirection) {
+  if (typeof yawDeg !== 'number' || typeof pitchDeg !== 'number') {
+    return fallbackDirection || 'CENTER';
+  }
+
+  let horizontal = 'CENTER';
+  if (yawDeg > 26) horizontal = 'RIGHT';
+  else if (yawDeg < -26) horizontal = 'LEFT';
+
+  let vertical = '';
+  if (pitchDeg < -38) vertical = 'DOWN';
+  else if (pitchDeg > 18) vertical = 'UP';
+
+  if (vertical && horizontal !== 'CENTER') return `${vertical}-${horizontal}`;
+  if (vertical) return vertical;
+  return horizontal;
+}
+
+/**
+ * Evaluates raw gaze API result with client-side sanity checks so inverted
+ * solvePnP pitch, Gaze360 screen-center offset, or brief glances do not trigger
+ * immediate false-positive warnings, while accurately catching sustained
+ * off-screen gaze, missing face, and multiple faces.
+ */
+function sanitizeGazeResult(raw, counters, withinGracePeriod) {
+  if (!raw) return null;
+
+  // 1. No Face Detected
+  if (!raw.face_detected) {
+    const nextNoFace = withinGracePeriod ? 0 : (counters.noFace || 0) + 1;
+    const isNoFaceSuspicious = !withinGracePeriod && nextNoFace >= CONSECUTIVE_NO_FACE_THRESHOLD;
+    return {
+      ...raw,
+      gaze_direction: isNoFaceSuspicious ? 'NO_FACE' : 'NO_FACE_PENDING',
+      is_suspicious: isNoFaceSuspicious,
+      suspicion_score: isNoFaceSuspicious ? Math.min(1.0, nextNoFace / 5) : 0,
+      message: isNoFaceSuspicious ? 'No face detected in camera' : 'Detecting face...',
+      nextCounters: { away: 0, noFace: nextNoFace, multiFace: 0 },
+    };
+  }
+
+  // 2. Multiple Faces Detected
+  if (raw.gaze_direction === 'MULTIPLE_FACES' || (typeof raw.face_count === 'number' && raw.face_count > 1)) {
+    const nextMulti = withinGracePeriod ? 0 : (counters.multiFace || 0) + 1;
+    const isMultiSuspicious = !withinGracePeriod && nextMulti >= 1;
+    return {
+      ...raw,
+      gaze_direction: 'MULTIPLE_FACES',
+      is_suspicious: isMultiSuspicious,
+      suspicion_score: isMultiSuspicious ? Math.min(1.0, 0.75 + 0.15 * nextMulti) : 0.4,
+      message: `Multiple faces detected in camera`,
+      nextCounters: { away: 0, noFace: 0, multiFace: nextMulti },
+    };
+  }
+
+  // 3. Single Face: Head Pose + Gaze Angles
+  const headYaw = raw.head_pose ? Math.abs(raw.head_pose.yaw || 0) : 0;
+  const headPitch = raw.head_pose ? Math.abs(normalizeHeadPitch(raw.head_pose.pitch || 0)) : 0;
+  const extremeHeadTurn = headYaw > 26 || headPitch > 24;
+
+  const direction = computeScreenDirection(raw.yaw, raw.pitch, raw.gaze_direction);
+  const isLookingAway = direction !== 'CENTER' || extremeHeadTurn;
+
+  const nextAway = withinGracePeriod
+    ? 0
+    : isLookingAway
+    ? (counters.away || 0) + 1
+    : 0;
+
+  const isSuspicious = !withinGracePeriod && nextAway >= CONSECUTIVE_AWAY_THRESHOLD;
+  const suspicionScore = isSuspicious ? Math.min(1.0, nextAway / 5) : Math.min(0.5, nextAway / 5);
+
+  return {
+    ...raw,
+    gaze_direction: isLookingAway ? (direction === 'CENTER' ? 'HEAD_AWAY' : direction) : 'CENTER',
+    is_suspicious: isSuspicious,
+    suspicion_score: suspicionScore,
+    nextCounters: { away: nextAway, noFace: 0, multiFace: 0 },
+  };
+}
+
 /**
  * CameraPreview.jsx
- * ProctorTrackâ„¢ candidate webcam feed component.
- *
- * Supports live camera stream via navigator.mediaDevices.getUserMedia()
- * with graceful fallback to simulation/standby mode if permission is denied,
- * camera is absent, or user toggles off.
+ * ProctorTrack™ candidate webcam feed component.
  *
  * Props:
  *   candidateName  string
+ *   sessionId      string
+ *   isActive       boolean
+ *   onGazeEvent    function
+ *   gazeEnabled    boolean
  */
-export default function CameraPreview({ candidateName, isActive = true, onGazeEvent, gazeEnabled = true }) {
-  const [isExpanded, setIsExpanded] = useState(false);
+export default function CameraPreview({
+  candidateName,
+  sessionId,
+  isActive = true,
+  onGazeEvent,
+  gazeEnabled = true,
+}) {
   const [streamActive, setStreamActive] = useState(false);
   const [cameraError, setCameraError] = useState(null);
   const [isStarting, setIsStarting] = useState(false);
@@ -24,6 +135,8 @@ export default function CameraPreview({ candidateName, isActive = true, onGazeEv
   const streamRef = useRef(null);
   const canvasRef = useRef(null);
   const lastSuspiciousCallRef = useRef(0);
+  const streamStartedAtRef = useRef(0);
+  const countersRef = useRef({ away: 0, noFace: 0, multiFace: 0 });
 
   // Stop media tracks
   const stopStream = () => {
@@ -58,6 +171,8 @@ export default function CameraPreview({ candidateName, isActive = true, onGazeEv
       });
 
       streamRef.current = stream;
+      streamStartedAtRef.current = Date.now();
+      countersRef.current = { away: 0, noFace: 0, multiFace: 0 };
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.play().catch((playErr) => {
@@ -97,6 +212,8 @@ export default function CameraPreview({ candidateName, isActive = true, onGazeEv
               return;
             }
             streamRef.current = stream;
+            streamStartedAtRef.current = Date.now();
+            countersRef.current = { away: 0, noFace: 0, multiFace: 0 };
             if (videoRef.current) {
               videoRef.current.srcObject = stream;
               videoRef.current.play().catch((e) => void e);
@@ -126,7 +243,7 @@ export default function CameraPreview({ candidateName, isActive = true, onGazeEv
     };
   }, [isActive]);
 
-  // When streamActive changes or expands, ensure video element is bound
+  // When streamActive changes, ensure video element is bound
   useEffect(() => {
     if (streamActive && streamRef.current && videoRef.current) {
       if (videoRef.current.srcObject !== streamRef.current) {
@@ -134,7 +251,7 @@ export default function CameraPreview({ candidateName, isActive = true, onGazeEv
         videoRef.current.play().catch((e) => void e);
       }
     }
-  }, [streamActive, isExpanded]);
+  }, [streamActive]);
 
   // Gaze Analysis Interval
   useEffect(() => {
@@ -152,15 +269,32 @@ export default function CameraPreview({ candidateName, isActive = true, onGazeEv
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
         const base64Image = canvas.toDataURL('image/jpeg', 0.8);
-        const result = await analyzeGazeFrame(base64Image);
+        const rawResult = await analyzeGazeFrame(
+          base64Image,
+          sessionId || candidateName || 'default',
+          canvas
+        );
 
-        if (result) {
-          setGazeResult(result);
-          if (result.is_suspicious && onGazeEvent) {
-            const now = Date.now();
-            if (now - lastSuspiciousCallRef.current > 10000) { // 10 seconds debounce
+        if (rawResult) {
+          const now = Date.now();
+          const withinGracePeriod =
+            streamStartedAtRef.current > 0 && now - streamStartedAtRef.current < STARTUP_GRACE_MS;
+
+          const sanitized = sanitizeGazeResult(
+            rawResult,
+            countersRef.current,
+            withinGracePeriod
+          );
+          if (!sanitized) return;
+
+          countersRef.current = sanitized.nextCounters;
+          setGazeResult(sanitized);
+
+          if (sanitized.is_suspicious && onGazeEvent) {
+            if (now - lastSuspiciousCallRef.current > WARNING_COOLDOWN_MS) {
               lastSuspiciousCallRef.current = now;
-              onGazeEvent(result);
+              countersRef.current = { away: 0, noFace: 0, multiFace: 0 };
+              onGazeEvent(sanitized);
             }
           }
         }
@@ -170,7 +304,19 @@ export default function CameraPreview({ candidateName, isActive = true, onGazeEv
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [streamActive, gazeEnabled, onGazeEvent]);
+  }, [streamActive, gazeEnabled, onGazeEvent, sessionId, candidateName]);
+
+  const getGazeStatusLabel = () => {
+    if (!gazeResult) return 'Analyzing...';
+    if (gazeResult.is_suspicious) {
+      if (gazeResult.gaze_direction === 'NO_FACE') return 'NO FACE DETECTED';
+      if (gazeResult.gaze_direction === 'MULTIPLE_FACES') return 'MULTIPLE FACES';
+      return 'SUSPICIOUS GAZE';
+    }
+    if (gazeResult.gaze_direction === 'NO_FACE_PENDING') return 'Adjusting Face...';
+    if (gazeResult.gaze_direction === 'CENTER') return 'Focused';
+    return `Glancing (${gazeResult.gaze_direction})`;
+  };
 
   return (
     <div
@@ -248,21 +394,6 @@ export default function CameraPreview({ candidateName, isActive = true, onGazeEv
               <RefreshCw size={11} className={isStarting ? 'spin' : ''} /> Enable
             </button>
           )}
-
-          <button
-            type="button"
-            onClick={() => setIsExpanded((p) => !p)}
-            style={{
-              fontSize: '10.5px',
-              color: 'var(--text-muted)',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              fontWeight: 600,
-            }}
-          >
-            {isExpanded ? 'Minimize' : 'Expand'}
-          </button>
         </div>
       </div>
 
@@ -271,7 +402,7 @@ export default function CameraPreview({ candidateName, isActive = true, onGazeEv
         style={{
           position: 'relative',
           backgroundColor: '#0a1c30',
-          aspectRatio: isExpanded ? '4/3' : '16/9',
+          aspectRatio: '16/9',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -281,17 +412,20 @@ export default function CameraPreview({ candidateName, isActive = true, onGazeEv
         {/* Hidden canvas for frame capture */}
         <canvas ref={canvasRef} width="320" height="240" style={{ display: 'none' }} />
 
-        {/* Live video element */}
+        {/* Live video element (PiP & fullscreen disabled so browser overlay cannot steal focus) */}
         <video
           ref={videoRef}
           playsInline
           autoPlay
           muted
+          disablePictureInPicture
+          controlsList="nodownload nofullscreen noremoteplayback"
           style={{
             width: '100%',
             height: '100%',
             objectFit: 'cover',
             transform: 'scaleX(-1)', // mirror for candidate comfort
+            pointerEvents: 'none',
             display: streamActive ? 'block' : 'none',
           }}
         />
@@ -436,7 +570,7 @@ export default function CameraPreview({ candidateName, isActive = true, onGazeEv
           padding: '9px 16px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '8px'
+          gap: '8px',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -476,18 +610,26 @@ export default function CameraPreview({ candidateName, isActive = true, onGazeEv
                   width: '7px',
                   height: '7px',
                   borderRadius: '50%',
-                  backgroundColor: gazeResult?.is_suspicious ? '#ef4444' : gazeResult?.gaze_direction === 'CENTER' ? '#22c55e' : '#eab308',
+                  backgroundColor: gazeResult?.is_suspicious
+                    ? '#ef4444'
+                    : gazeResult?.gaze_direction === 'CENTER' || !gazeResult
+                    ? '#22c55e'
+                    : '#eab308',
                   display: 'inline-block',
                 }}
               />
               <span
                 style={{
                   fontSize: '11px',
-                  color: gazeResult?.is_suspicious ? '#dc2626' : gazeResult?.gaze_direction === 'CENTER' ? '#16a34a' : '#d97706',
+                  color: gazeResult?.is_suspicious
+                    ? '#dc2626'
+                    : gazeResult?.gaze_direction === 'CENTER' || !gazeResult
+                    ? '#16a34a'
+                    : '#d97706',
                   fontWeight: 600,
                 }}
               >
-                {gazeResult?.is_suspicious ? 'SUSPICIOUS GAZE' : gazeResult?.gaze_direction === 'CENTER' ? 'Focused' : gazeResult?.gaze_direction || 'Analyzing...'}
+                {getGazeStatusLabel()}
               </span>
             </div>
           </div>

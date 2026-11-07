@@ -5,7 +5,8 @@ import cv2
 import numpy as np
 import threading
 import math
-from typing import Optional
+from typing import Optional, Dict
+from dataclasses import dataclass
 from pydantic import BaseModel
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,8 +28,16 @@ from gaze_model import GazePredictor
 from head_pose import estimate_head_pose
 from eye_crop import GeometricGazeEstimator, GazeDirection
 
+
+@dataclass
+class SessionGazeState:
+    consecutive_non_center: int = 0
+    consecutive_no_face: int = 0
+    consecutive_multi_face: int = 0
+
+
 class ImageFaceLandmarkDetector:
-    def __init__(self, max_faces=1, model_path=None):
+    def __init__(self, max_faces=3, model_path=None):
         if model_path is None:
             model_path = Path(__file__).parent / 'models' / 'face_landmarker.task'
         base_options = mp_python.BaseOptions(model_asset_path=str(model_path))
@@ -61,7 +70,7 @@ class ImageFaceLandmarkDetector:
     def _build_face_data(self, face_lms, img_w, img_h) -> FaceData:
         landmarks = []
         landmarks_px = []
-        xs, ys = [] , []
+        xs, ys = [], []
 
         for lm in face_lms:
             landmarks.append((lm.x, lm.y, lm.z))
@@ -102,6 +111,7 @@ class ImageFaceLandmarkDetector:
             right_iris_center_px=right_iris_center,
         )
 
+
 app = FastAPI()
 
 app.add_middleware(
@@ -112,22 +122,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 class AnalyzeRequest(BaseModel):
     image: str
+    session_id: Optional[str] = "default"
+
 
 detector = None
 gaze_predictor = None
 geometric_estimator = None
 model_type = "none"
 model_lock = threading.Lock()
+session_states: Dict[str, SessionGazeState] = {}
 
-consecutive_non_center = 0
 
 @app.on_event("startup")
 def startup_event():
     global detector, gaze_predictor, geometric_estimator, model_type
     print("Loading models...")
-    detector = ImageFaceLandmarkDetector()
+    detector = ImageFaceLandmarkDetector(max_faces=3)
     geometric_estimator = GeometricGazeEstimator()
     try:
         gaze_predictor = GazePredictor()
@@ -138,24 +151,35 @@ def startup_event():
         model_type = "geometric"
         gaze_predictor = None
 
+
 @app.get("/health")
 def health():
     return {"status": "ok", "model": model_type}
 
+
 def get_l2cs_direction(yaw_rad: float, pitch_rad: float) -> str:
+    """
+    Convert L2CS-Net Gaze360 (yaw, pitch) in radians to screen-relative direction.
+    In L2CS-Net Gaze360 on a top-mounted laptop webcam:
+      - Looking at the laptop screen corresponds to pitch in [-38°, +18°]
+        (negative pitch = downward from top bezel toward screen).
+      - Looking below the screen (desk/lap/phone) has pitch < -38°.
+      - Looking above the webcam/monitor has pitch > +18°.
+      - Horizontal screen span corresponds to yaw in [-26°, +26°].
+    """
     yaw_deg = math.degrees(yaw_rad)
     pitch_deg = math.degrees(pitch_rad)
 
     horizontal = "CENTER"
-    if yaw_deg > 15:
+    if yaw_deg > 26:
         horizontal = "RIGHT"
-    elif yaw_deg < -15:
+    elif yaw_deg < -26:
         horizontal = "LEFT"
 
     vertical = ""
-    if pitch_deg > 15:
+    if pitch_deg < -38:
         vertical = "DOWN"
-    elif pitch_deg < -15:
+    elif pitch_deg > 18:
         vertical = "UP"
 
     if vertical and horizontal != "CENTER":
@@ -165,9 +189,10 @@ def get_l2cs_direction(yaw_rad: float, pitch_rad: float) -> str:
     else:
         return horizontal
 
+
 @app.post("/analyze")
 def analyze(req: AnalyzeRequest):
-    global consecutive_non_center
+    session_key = (req.session_id or "default").strip() or "default"
 
     base64_data = req.image
     if "," in base64_data:
@@ -183,24 +208,60 @@ def analyze(req: AnalyzeRequest):
         return {"error": f"Invalid base64 image: {e}"}
 
     with model_lock:
-        faces = detector.detect(frame)
+        state = session_states.setdefault(session_key, SessionGazeState())
+        raw_faces = detector.detect(frame)
 
-        if not faces:
-            consecutive_non_center = 0
+        # 1. Handle No Face Detected
+        if not raw_faces:
+            state.consecutive_no_face += 1
+            state.consecutive_non_center = 0
+            state.consecutive_multi_face = 0
+            is_no_face_suspicious = state.consecutive_no_face >= 4
             return {
                 "face_detected": False,
-                "gaze_direction": "CENTER",
+                "face_count": 0,
+                "gaze_direction": "NO_FACE" if is_no_face_suspicious else "CENTER",
                 "pitch": None,
                 "yaw": None,
                 "head_pose": None,
-                "is_suspicious": False,
-                "suspicion_score": 0.0,
-                "message": "No face detected"
+                "is_suspicious": is_no_face_suspicious,
+                "suspicion_score": min(1.0, state.consecutive_no_face / 5.0) if is_no_face_suspicious else 0.0,
+                "message": "Suspicious: No face detected in camera" if is_no_face_suspicious else "No face detected"
             }
 
-        face = faces[0]
+        state.consecutive_no_face = 0
 
-        # Head pose
+        # Filter out tiny background artifacts (< 20% area of primary face)
+        primary_face = raw_faces[0]
+        primary_area = max(1, primary_face.bbox[2] * primary_face.bbox[3])
+        valid_faces = [
+            f for f in raw_faces
+            if (f.bbox[2] * f.bbox[3]) >= 0.20 * primary_area
+        ]
+        face_count = len(valid_faces)
+
+        # 2. Check Multiple Faces
+        if face_count > 1:
+            state.consecutive_multi_face += 1
+        else:
+            state.consecutive_multi_face = 0
+
+        if state.consecutive_multi_face >= 2:
+            return {
+                "face_detected": True,
+                "face_count": face_count,
+                "gaze_direction": "MULTIPLE_FACES",
+                "pitch": None,
+                "yaw": None,
+                "head_pose": None,
+                "is_suspicious": True,
+                "suspicion_score": min(1.0, 0.6 + 0.2 * state.consecutive_multi_face),
+                "message": f"Suspicious: Multiple faces ({face_count}) detected in camera"
+            }
+
+        face = primary_face
+
+        # 3. Head pose
         head_pose = estimate_head_pose(frame, face)
         hp_dict = None
         if head_pose:
@@ -210,7 +271,7 @@ def analyze(req: AnalyzeRequest):
                 "roll": head_pose.roll
             }
 
-        # Gaze direction
+        # 4. Gaze direction
         pitch_val = None
         yaw_val = None
         direction = "CENTER"
@@ -227,32 +288,28 @@ def analyze(req: AnalyzeRequest):
 
         suspicious_head = False
         if head_pose:
-            if abs(head_pose.yaw) > 30 or abs(head_pose.pitch) > 25:
+            if abs(head_pose.yaw) > 35 or abs(head_pose.pitch) > 30:
                 suspicious_head = True
 
-        if direction != "CENTER":
-            consecutive_non_center += 1
+        if direction != "CENTER" or suspicious_head:
+            state.consecutive_non_center += 1
         else:
-            if not suspicious_head:
-                consecutive_non_center = 0
+            state.consecutive_non_center = 0
 
-        is_suspicious = False
-        suspicion_score = min(1.0, consecutive_non_center / 10.0)
-
-        if consecutive_non_center >= 5 or suspicious_head:
-            is_suspicious = True
+        is_suspicious = state.consecutive_non_center >= 4
+        suspicion_score = min(1.0, state.consecutive_non_center / 6.0)
 
         msg = "Normal"
-        if not is_suspicious:
-            pass
-        elif suspicious_head:
-            msg = "Suspicious: Head turned away"
-        else:
-            msg = "Suspicious: Looking away"
+        if is_suspicious:
+            if suspicious_head:
+                msg = "Suspicious: Head turned away"
+            else:
+                msg = "Suspicious: Looking away"
 
         return {
             "face_detected": True,
-            "gaze_direction": direction,
+            "face_count": face_count,
+            "gaze_direction": direction if direction != "CENTER" or not suspicious_head else "AWAY",
             "pitch": pitch_val,
             "yaw": yaw_val,
             "head_pose": hp_dict,
@@ -260,6 +317,7 @@ def analyze(req: AnalyzeRequest):
             "suspicion_score": suspicion_score,
             "message": msg
         }
+
 
 if __name__ == '__main__':
     uvicorn.run("server:app", host="0.0.0.0", port=5001, reload=False)

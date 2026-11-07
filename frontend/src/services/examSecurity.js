@@ -140,6 +140,8 @@ export function isFullscreen() {
 export function setupSecurityListeners(onEvent) {
   // Timestamps to prevent duplicate rapid firing across blur/visibilitychange/keydown/etc.
   const lastEventTimestamps = {};
+  const listenersAttachedAt = Date.now();
+  const STARTUP_TRANSITION_MS = 3500; // Ignore momentary window blur while entering fullscreen / starting camera
 
   const emitWithCooldown = (event, cooldownMs = 1200) => {
     const now = Date.now();
@@ -238,6 +240,9 @@ export function setupSecurityListeners(onEvent) {
 
   // 7. Window Blur (only fires if visibilitychange hasn't already fired within cooldown)
   const handleWindowBlur = () => {
+    if (Date.now() - listenersAttachedAt < STARTUP_TRANSITION_MS) {
+      return;
+    }
     // If document is already hidden, visibilitychange already handled it
     if (!document.hidden) {
       emitWithCooldown(
@@ -285,6 +290,29 @@ export function setupSecurityListeners(onEvent) {
     e.returnValue = '';
   };
 
+  // 10. Long Inactivity Detection (30 seconds without mouse/keyboard/scroll/touch)
+  const INACTIVITY_TIMEOUT_MS = 30000;
+  let lastActivityTimestamp = Date.now();
+
+  const handleUserActivity = () => {
+    lastActivityTimestamp = Date.now();
+  };
+
+  const inactivityIntervalId = setInterval(() => {
+    const now = Date.now();
+    if (now - lastActivityTimestamp >= INACTIVITY_TIMEOUT_MS) {
+      lastActivityTimestamp = now; // Reset so next check waits another full window
+      emitWithCooldown(
+        createSecurityEvent(
+          SECURITY_EVENT_TYPE.LONG_INACTIVITY,
+          SECURITY_SEVERITY.LOW,
+          'You have been inactive for 30+ seconds. Please continue the exam.'
+        ),
+        10000
+      );
+    }
+  }, 5000);
+
   // Register listeners
   document.addEventListener('copy', handleCopy);
   document.addEventListener('cut', handleCut);
@@ -297,9 +325,15 @@ export function setupSecurityListeners(onEvent) {
   document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
   document.addEventListener('mozfullscreenchange', handleFullscreenChange);
   window.addEventListener('beforeunload', handleBeforeUnload);
+  window.addEventListener('mousemove', handleUserActivity, { passive: true });
+  window.addEventListener('mousedown', handleUserActivity, { passive: true });
+  window.addEventListener('keydown', handleUserActivity, { passive: true });
+  window.addEventListener('scroll', handleUserActivity, { passive: true });
+  window.addEventListener('touchstart', handleUserActivity, { passive: true });
 
   // Return teardown function
   return function removeSecurityListeners() {
+    clearInterval(inactivityIntervalId);
     document.removeEventListener('copy', handleCopy);
     document.removeEventListener('cut', handleCut);
     document.removeEventListener('paste', handlePaste);
@@ -311,6 +345,11 @@ export function setupSecurityListeners(onEvent) {
     document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
     document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
     window.removeEventListener('beforeunload', handleBeforeUnload);
+    window.removeEventListener('mousemove', handleUserActivity);
+    window.removeEventListener('mousedown', handleUserActivity);
+    window.removeEventListener('keydown', handleUserActivity);
+    window.removeEventListener('scroll', handleUserActivity);
+    window.removeEventListener('touchstart', handleUserActivity);
   };
 }
 
