@@ -23,6 +23,12 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/gaze-api/, ''),
       },
+      '/voice-api': {
+        target: 'http://localhost:8000',
+        ws: true,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/voice-api/, ''),
+      },
     },
   },
 })

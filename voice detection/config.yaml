@@ -21,9 +21,9 @@ vad:
   speech_pad_ms: 30           # (enrollment) padding around speech islands
 
 enrollment:
-  target_duration_sec: 20     # How long the UI records
-  min_speech_sec: 8.0         # Reject enrollment if less speech than this remains after VAD
-  min_segments: 6             # ...or fewer than this many 2 s segments
+  target_duration_sec: 12     # How long the UI records
+  min_speech_sec: 3.5         # Reject enrollment if less speech than this remains after VAD
+  min_segments: 2             # ...or fewer than this many 2 s segments
   segment_sec: 2.0
   segment_overlap: 0.5        # 50 % overlap -> 1 s hop
   leave_one_out: true         # Self-similarity: compare each segment to the mean of the OTHERS (unbiased)

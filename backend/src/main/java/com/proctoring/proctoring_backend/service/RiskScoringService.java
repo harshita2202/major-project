@@ -42,6 +42,12 @@ public class RiskScoringService {
     public static final String WARNING_GAZE =
             "Please keep your attention on the exam screen. Repeated suspicious behavior may result in automatic submission.";
 
+    public static final String WARNING_VOICE =
+            "Another voice or unauthorized speech was detected. Please ensure you are alone and silent during the exam. Further violations may result in automatic exam submission.";
+
+    public static final String WARNING_SILENT_MIC =
+            "Your microphone appears to be muted or silent. Please keep your microphone active throughout the exam.";
+
     public static final String WARNING_LONG_INACTIVITY =
             "You have been inactive for a long period. Please continue the exam.";
 
@@ -69,7 +75,9 @@ public class RiskScoringService {
         return switch (eventType.trim().toUpperCase()) {
             case "NETWORK_INTERRUPTION", "NETWORK_DISCONNECTION", "NETWORK" -> 3;
             case "LONG_INACTIVITY", "INACTIVITY" -> 5;
+            case "SILENT_MIC", "MIC_MUTED" -> 5;
             case "GAZE_WARNING", "GAZE" -> 8;
+            case "VOICE_WARNING", "AUDIO_WARNING", "MULTIPLE_VOICES", "VOICE" -> 15;
             case "SHORTCUT_ATTEMPT", "KEYBOARD_SHORTCUT", "KEYBOARD_SHORTCUT_ATTEMPT" -> 5;
             case "FULLSCREEN_EXIT" -> 10;
             case "TAB_SWITCH" -> 15;
@@ -107,6 +115,8 @@ public class RiskScoringService {
             case "FULLSCREEN_EXIT" -> WARNING_FULLSCREEN_EXIT;
             case "SHORTCUT_ATTEMPT", "KEYBOARD_SHORTCUT", "KEYBOARD_SHORTCUT_ATTEMPT" -> WARNING_KEYBOARD_SHORTCUT;
             case "GAZE_WARNING", "GAZE" -> WARNING_GAZE;
+            case "VOICE_WARNING", "AUDIO_WARNING", "MULTIPLE_VOICES", "VOICE" -> WARNING_VOICE;
+            case "SILENT_MIC", "MIC_MUTED" -> WARNING_SILENT_MIC;
             case "LONG_INACTIVITY", "INACTIVITY" -> WARNING_LONG_INACTIVITY;
             case "NETWORK_INTERRUPTION", "NETWORK_DISCONNECTION", "NETWORK" -> WARNING_NETWORK;
             default -> "Please follow examination rules. Further violations may result in automatic exam submission.";

@@ -17,22 +17,26 @@ class RiskScoringServiceTest {
     }
 
     @Test
-    @DisplayName("Verify event point weights for all event types")
+    @DisplayName("Verify event point weights for all event types including VoiceGuard events")
     void testEventPointWeights() {
         // LOW-RISK
-        assertEquals(5, riskScoringService.getEventPoints("NETWORK_INTERRUPTION"));
-        assertEquals(5, riskScoringService.getEventPoints("NETWORK_DISCONNECTION"));
+        assertEquals(3, riskScoringService.getEventPoints("NETWORK_INTERRUPTION"));
+        assertEquals(3, riskScoringService.getEventPoints("NETWORK_DISCONNECTION"));
         assertEquals(5, riskScoringService.getEventPoints("LONG_INACTIVITY"));
+        assertEquals(5, riskScoringService.getEventPoints("SILENT_MIC"));
 
         // MEDIUM-RISK
-        assertEquals(10, riskScoringService.getEventPoints("GAZE_WARNING"));
-        assertEquals(15, riskScoringService.getEventPoints("FULLSCREEN_EXIT"));
+        assertEquals(8, riskScoringService.getEventPoints("GAZE_WARNING"));
+        assertEquals(10, riskScoringService.getEventPoints("FULLSCREEN_EXIT"));
+        assertEquals(15, riskScoringService.getEventPoints("VOICE_WARNING"));
+        assertEquals(15, riskScoringService.getEventPoints("MULTIPLE_VOICES"));
+        assertEquals(15, riskScoringService.getEventPoints("AUDIO_WARNING"));
 
         // HIGHER-RISK
-        assertEquals(20, riskScoringService.getEventPoints("TAB_SWITCH"));
-        assertEquals(25, riskScoringService.getEventPoints("CLIPBOARD_PASTE_ATTEMPT"));
-        assertEquals(25, riskScoringService.getEventPoints("COPY_ATTEMPT"));
-        assertEquals(25, riskScoringService.getEventPoints("PASTE_ATTEMPT"));
+        assertEquals(15, riskScoringService.getEventPoints("TAB_SWITCH"));
+        assertEquals(20, riskScoringService.getEventPoints("CLIPBOARD_PASTE_ATTEMPT"));
+        assertEquals(20, riskScoringService.getEventPoints("COPY_ATTEMPT"));
+        assertEquals(20, riskScoringService.getEventPoints("PASTE_ATTEMPT"));
     }
 
     @Test
@@ -52,24 +56,21 @@ class RiskScoringServiceTest {
     }
 
     @Test
-    @DisplayName("Verify cumulative calculation example from specification")
-    void testCumulativeCalculationExample() {
-        // Example from spec:
-        // TAB_SWITCH (+20)
-        // TAB_SWITCH (+20)
-        // FULLSCREEN_EXIT (+15)
-        // Total = 55 -> MEDIUM
+    @DisplayName("Verify cumulative calculation with VoiceGuard warnings")
+    void testCumulativeCalculationWithVoiceWarnings() {
         int score = 0;
-        score += riskScoringService.getEventPoints("TAB_SWITCH"); // 20
-        score += riskScoringService.getEventPoints("TAB_SWITCH"); // 40
-        score += riskScoringService.getEventPoints("FULLSCREEN_EXIT"); // 55
+        score += riskScoringService.getEventPoints("VOICE_WARNING"); // 15
+        score += riskScoringService.getEventPoints("VOICE_WARNING"); // 30
+        score += riskScoringService.getEventPoints("TAB_SWITCH");    // 45
+        assertEquals("LOW", riskScoringService.calculateRiskLevel(score));
 
-        assertEquals(55, score);
+        score += riskScoringService.getEventPoints("VOICE_WARNING"); // 60 -> MEDIUM
+        assertEquals(60, score);
         assertEquals("MEDIUM", riskScoringService.calculateRiskLevel(score));
     }
 
     @Test
-    @DisplayName("Verify feature-specific warnings match specification exactly")
+    @DisplayName("Verify feature-specific warnings match specification including VoiceGuard")
     void testFeatureSpecificWarnings() {
         assertEquals(
                 RiskScoringService.WARNING_PASTE,
@@ -86,6 +87,18 @@ class RiskScoringServiceTest {
         assertEquals(
                 RiskScoringService.WARNING_GAZE,
                 riskScoringService.getFeatureWarning("GAZE_WARNING")
+        );
+        assertEquals(
+                RiskScoringService.WARNING_VOICE,
+                riskScoringService.getFeatureWarning("VOICE_WARNING")
+        );
+        assertEquals(
+                RiskScoringService.WARNING_VOICE,
+                riskScoringService.getFeatureWarning("MULTIPLE_VOICES")
+        );
+        assertEquals(
+                RiskScoringService.WARNING_SILENT_MIC,
+                riskScoringService.getFeatureWarning("SILENT_MIC")
         );
         assertEquals(
                 RiskScoringService.WARNING_LONG_INACTIVITY,

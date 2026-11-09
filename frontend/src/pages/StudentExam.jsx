@@ -23,6 +23,7 @@ import SecurityViolationModal from '../components/exam/SecurityViolationModal';
 import NetworkInterruptionBanner from '../components/exam/NetworkInterruptionBanner';
 import CameraPreview from '../components/exam/CameraPreview';
 import MobileCameraPanel from '../components/exam/MobileCameraPanel';
+import VoiceMonitorPanel from '../components/exam/VoiceMonitorPanel';
 import { subscribeToSessionEvents } from '../services/websocket';
 
 import {
@@ -181,6 +182,7 @@ export default function StudentExam() {
         autoTerminated: existing.autoTerminated || false,
         terminationReason: existing.terminationReason || '',
         scoreData: existing.scoreData || { score: 0, correctCount: 0, totalQuestions: 0, percentage: 0 },
+        voiceSession: existing.voiceSession || null,
       };
     }
     if (existing && existing.phase === 'SUBMITTED') {
@@ -199,6 +201,7 @@ export default function StudentExam() {
         autoTerminated: existing.autoTerminated || false,
         terminationReason: existing.terminationReason || '',
         scoreData: existing.scoreData || { score: 0, correctCount: 0, totalQuestions: 0, percentage: 0 },
+        voiceSession: existing.voiceSession || null,
       };
     }
     return {
@@ -219,6 +222,7 @@ export default function StudentExam() {
 
   const [init] = useState(initSession);
   const [sessionId, setSessionId] = useState(init.sessionId || null);
+  const [voiceSession, setVoiceSession] = useState(init.voiceSession || null);
   const [phase, setPhase] = useState(init.phase);
   const [instructionsAcknowledged, setInstructionsAcknowledged] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(init.currentIndex);
@@ -473,6 +477,26 @@ export default function StudentExam() {
     handleSecurityEvent(gazeEvent);
   }, [handleSecurityEvent]);
 
+  // ── Voice / Audio Detection Event Handler ─────────────────────────────────
+  const handleVoiceEvent = useCallback((voiceData) => {
+    if (phaseRef.current !== PHASE.ACTIVE) return;
+    const isSilentMic = voiceData?.eventType === 'SILENT_MIC';
+    const eventType = isSilentMic
+      ? SECURITY_EVENT_TYPE.SILENT_MIC
+      : SECURITY_EVENT_TYPE.VOICE_WARNING;
+    const severity = isSilentMic ? SECURITY_SEVERITY.LOW : SECURITY_SEVERITY.MEDIUM;
+    const detailMsg =
+      voiceData?.message ||
+      (isSilentMic
+        ? 'Microphone appears to be silent or muted. Please keep your microphone active.'
+        : 'Multiple or unrecognized voice detected during the examination. Please ensure you are alone and silent.');
+    const voiceEvent = {
+      ...createSecurityEvent(eventType, severity, detailMsg),
+      customWarning: detailMsg,
+    };
+    handleSecurityEvent(voiceEvent);
+  }, [handleSecurityEvent]);
+
   // ── WebSocket live session listener (for instant auto-submit from backend) ──
   useEffect(() => {
     if (phase !== PHASE.ACTIVE || !sessionId) return;
@@ -700,9 +724,10 @@ export default function StudentExam() {
       timeRemainingSeconds: timeRemaining,
       tabSwitchWarnings,
       fullscreenExitsCount,
+      voiceSession,
       startedAt: loadSession(examId)?.startedAt || new Date().toISOString(),
     });
-  }, [answers, currentIndex, timeRemaining, tabSwitchWarnings, fullscreenExitsCount, phase, examId, securityEvents]);
+  }, [answers, currentIndex, timeRemaining, tabSwitchWarnings, fullscreenExitsCount, voiceSession, phase, examId, securityEvents]);
 
   // ── Sync active attempt & progress with invigilator dashboard ─────────────
   useEffect(() => {
@@ -1138,6 +1163,13 @@ export default function StudentExam() {
                 </li>
               ))}
             </ol>
+
+            {/* VoiceGuard Biometric Voice Enrollment */}
+            <VoiceMonitorPanel
+              mode="enroll"
+              voiceSession={voiceSession}
+              onEnrolled={(enrolled) => setVoiceSession(enrolled)}
+            />
 
             {/* ProctorTrack note */}
             <div
@@ -1786,6 +1818,13 @@ export default function StudentExam() {
               isActive={phase === PHASE.ACTIVE}
               onGazeEvent={handleGazeEvent}
               gazeEnabled={phase === PHASE.ACTIVE}
+            />
+            <VoiceMonitorPanel
+              mode="monitor"
+              isActive={phase === PHASE.ACTIVE}
+              voiceSession={voiceSession}
+              onEnrolled={(enrolled) => setVoiceSession(enrolled)}
+              onVoiceEvent={handleVoiceEvent}
             />
             <MobileCameraPanel
               sessionId={sessionId}

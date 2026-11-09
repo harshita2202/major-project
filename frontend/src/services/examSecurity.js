@@ -25,6 +25,11 @@ export const SECURITY_EVENT_TYPE = {
   CONTEXT_MENU_ATTEMPT: 'CONTEXT_MENU_ATTEMPT',
 
   GAZE_WARNING: 'GAZE_WARNING',
+  VOICE_WARNING: 'VOICE_WARNING',
+  AUDIO_WARNING: 'VOICE_WARNING',
+  MULTIPLE_VOICES: 'VOICE_WARNING',
+  SILENT_MIC: 'SILENT_MIC',
+
   NETWORK_INTERRUPTION: 'NETWORK_INTERRUPTION',
   NETWORK_DISCONNECTION: 'NETWORK_INTERRUPTION', // alias
   LONG_INACTIVITY: 'LONG_INACTIVITY',
@@ -389,6 +394,15 @@ export function countViolations(events = []) {
     (e) => e.type === SECURITY_EVENT_TYPE.CONTEXT_MENU_ATTEMPT
   ).length;
 
+  const voiceWarnings = events.filter(
+    (e) =>
+      e.type === SECURITY_EVENT_TYPE.VOICE_WARNING ||
+      e.type === 'VOICE_WARNING' ||
+      e.type === 'AUDIO_WARNING' ||
+      e.type === 'MULTIPLE_VOICES' ||
+      e.type === SECURITY_EVENT_TYPE.SILENT_MIC
+  ).length;
+
   const networkInterruptions = events.filter(
     (e) =>
       e.type === SECURITY_EVENT_TYPE.NETWORK_INTERRUPTION ||
@@ -408,6 +422,7 @@ export function countViolations(events = []) {
     pasteAttempts,
     shortcutAttempts,
     contextMenuAttempts,
+    voiceWarnings,
     networkInterruptions,
     total,
   };
