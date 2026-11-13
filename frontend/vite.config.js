@@ -29,6 +29,12 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/voice-api/, ''),
       },
+      '/ws-voice': {
+        target: 'http://localhost:8000',
+        ws: true,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/ws-voice/, '/ws/monitor'),
+      },
     },
   },
 })

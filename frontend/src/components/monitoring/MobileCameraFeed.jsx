@@ -21,6 +21,7 @@ const ICE_SERVERS = [
 export default function MobileCameraFeed({ sessionId, mobileConnected, candidateName }) {
   const [viewerState, setViewerState] = useState('idle'); // idle | connecting | connected | failed
   const [isViewing, setIsViewing] = useState(false);
+  const [fallbackFrame, setFallbackFrame] = useState(null);
 
   const videoRef = useRef(null);
   const pcRef = useRef(null);
@@ -143,6 +144,17 @@ export default function MobileCameraFeed({ sessionId, mobileConnected, candidate
     }
   };
 
+  // Subscribe to live fallback frame stream from mobile
+  useEffect(() => {
+    if (!sessionId) return;
+    const unsub = subscribeToTopic('/topic/webrtc/' + sessionId + '/frame', (data) => {
+      if (data && data.image) {
+        setFallbackFrame(data.image);
+      }
+    });
+    return () => { if (unsub) unsub(); };
+  }, [sessionId]);
+
   // Stop viewer when mobile disconnects
   useEffect(() => {
     if (!mobileConnected && isViewing) {
@@ -256,6 +268,22 @@ export default function MobileCameraFeed({ sessionId, mobileConnected, candidate
           justifyContent: 'center',
         }}
       >
+        {/* Live Fallback Frame from Mobile WebSocket */}
+        {fallbackFrame && (
+          <img
+            src={fallbackFrame}
+            alt="Mobile Secondary Feed"
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              position: 'absolute',
+              inset: 0,
+              zIndex: 2,
+            }}
+          />
+        )}
+
         <video
           ref={videoRef}
           playsInline
@@ -265,12 +293,15 @@ export default function MobileCameraFeed({ sessionId, mobileConnected, candidate
             width: '100%',
             height: '100%',
             objectFit: 'cover',
+            position: 'absolute',
+            inset: 0,
+            zIndex: 3,
             display: viewerState === 'connected' ? 'block' : 'none',
           }}
         />
 
-        {/* Placeholder when not viewing */}
-        {viewerState !== 'connected' && (
+        {/* Placeholder when not viewing and no fallback frame */}
+        {viewerState !== 'connected' && !fallbackFrame && (
           <div style={{ textAlign: 'center', padding: '16px', color: '#e2e8f0' }}>
             {viewerState === 'connecting' ? (
               <>

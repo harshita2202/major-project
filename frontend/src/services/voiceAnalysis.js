@@ -951,3 +951,273 @@ export class VoiceStreamMonitor {
     this.ws = null;
   }
 }
+
+
+// ─── Real-Time Multi-Voice Detection Service (Autocorrelation & Spectral Dispersion) ───
+export class VoiceMonitor {
+  /**
+   * @param {MediaStream} audioStream - Microphone media stream
+   * @param {Object} options
+   * @param {function} options.onViolation - Callback when multiple voices are detected
+   * @param {function} options.onStatusChange - Callback with { status, level, strikes, pitch }
+   * @param {number} [options.strikesToWarn=2]
+   * @param {number} [options.cooldownMs=8000]
+   */
+  constructor(audioStream, options = {}) {
+    this.stream = audioStream;
+    this.onViolation = options.onViolation || (() => {});
+    this.onStatusChange = options.onStatusChange || (() => {});
+    this.strikesToWarn = options.strikesToWarn || 2;
+    this.cooldownMs = options.cooldownMs || 8000;
+
+    this.audioCtx = null;
+    this.analyser = null;
+    this.sourceNode = null;
+    this.intervalId = null;
+
+    this.strikes = 0;
+    this.lastWarningTime = 0;
+    this.pitchHistory = []; // { pitch, confidence, time }
+    this.primaryPitchBaseline = null;
+    this.currentLevel = 0;
+    this.currentStatus = 'silent'; // 'silent' | 'normal' | 'multiple_voices'
+
+    this._destroyed = false;
+    this._initAudio();
+  }
+
+  _initAudio() {
+    if (!this.stream || !this.stream.getAudioTracks().length) {
+      console.warn('[VoiceMonitor] No audio track available in media stream.');
+      return;
+    }
+
+    try {
+      const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtxClass) {
+        console.warn('[VoiceMonitor] Web Audio API is not supported in this browser.');
+        return;
+      }
+
+      this.audioCtx = new AudioCtxClass();
+      if (this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume().catch(() => {});
+      }
+
+      this.sourceNode = this.audioCtx.createMediaStreamSource(this.stream);
+      this.analyser = this.audioCtx.createAnalyser();
+      this.analyser.fftSize = 2048;
+      this.analyser.smoothingTimeConstant = 0.6;
+
+      this.sourceNode.connect(this.analyser);
+
+      // Start analysis loop every 300 ms for responsive, low-latency voice detection
+      this.intervalId = setInterval(() => this._analyzeFrame(), 300);
+      console.log('[VoiceMonitor] Audio pipeline running at', this.audioCtx.sampleRate, 'Hz');
+    } catch (err) {
+      console.warn('[VoiceMonitor] Failed to initialize AudioContext:', err);
+    }
+  }
+
+  _detectPitchAutocorrelation(timeData, sampleRate) {
+    // Vocal pitch fundamental frequency range: 80 Hz to 350 Hz
+    const minLag = Math.floor(sampleRate / 350); // ~137 samples at 48kHz
+    const maxLag = Math.floor(sampleRate / 80);  // ~600 samples at 48kHz
+
+    let bestCorrelation = -1;
+    let bestLag = -1;
+    let secondBestCorrelation = -1;
+    let secondBestLag = -1;
+
+    // Calculate normalized autocorrelation across candidate pitch lags
+    for (let lag = minLag; lag <= maxLag; lag += 2) {
+      let correlation = 0;
+      let norm1 = 0;
+      let norm2 = 0;
+      const step = 2;
+      const len = timeData.length - lag;
+
+      for (let i = 0; i < len; i += step) {
+        correlation += timeData[i] * timeData[i + lag];
+        norm1 += timeData[i] * timeData[i];
+        norm2 += timeData[i + lag] * timeData[i + lag];
+      }
+
+      const denominator = Math.sqrt(norm1 * norm2);
+      if (denominator > 0) {
+        const r = correlation / denominator;
+        if (r > bestCorrelation) {
+          secondBestCorrelation = bestCorrelation;
+          secondBestLag = bestLag;
+          bestCorrelation = r;
+          bestLag = lag;
+        } else if (r > secondBestCorrelation && Math.abs(lag - bestLag) > 25) {
+          secondBestCorrelation = r;
+          secondBestLag = lag;
+        }
+      }
+    }
+
+    const primaryPitch = bestLag > 0 ? sampleRate / bestLag : 0;
+    const secondaryPitch = secondBestLag > 0 ? sampleRate / secondBestLag : 0;
+
+    return {
+      primaryPitch: bestCorrelation > 0.35 ? primaryPitch : 0,
+      confidence: bestCorrelation,
+      secondaryPitch: secondBestCorrelation > 0.35 ? secondaryPitch : 0,
+      secondaryConfidence: secondBestCorrelation,
+    };
+  }
+
+  _analyzeFrame() {
+    if (this._destroyed || !this.analyser || !this.audioCtx) return;
+
+    if (this.audioCtx.state === 'suspended') {
+      this.audioCtx.resume().catch(() => {});
+    }
+
+    const timeData = new Float32Array(this.analyser.fftSize);
+    const freqData = new Float32Array(this.analyser.frequencyBinCount);
+
+    this.analyser.getFloatTimeDomainData(timeData);
+    this.analyser.getFloatFrequencyData(freqData);
+
+    // 1. RMS level calculation
+    let sumSq = 0;
+    for (let i = 0; i < timeData.length; i++) {
+      sumSq += timeData[i] * timeData[i];
+    }
+    const rms = Math.sqrt(sumSq / timeData.length);
+    const dbfs = 20 * Math.log10(Math.max(rms, 1e-5));
+    // Scale -55 dBFS to 0, -10 dBFS to 1
+    const level = Math.min(1.0, Math.max(0, (dbfs + 55) / 45));
+    this.currentLevel = level;
+
+    // Ambient room silence check (below -52 dBFS)
+    if (dbfs < -52 || rms < 0.003) {
+      if (this.strikes > 0) this.strikes = Math.max(0, this.strikes - 1);
+      if (Date.now() - this.lastWarningTime > 3500) {
+        this.currentStatus = 'silent';
+      }
+      this.onStatusChange({
+        status: this.currentStatus,
+        level: 0,
+        strikes: this.strikes,
+        dbfs: Math.round(dbfs),
+        pitch: 0,
+      });
+      return;
+    }
+
+    // 2. Human speech pitch detection using normalized autocorrelation
+    const sampleRate = this.audioCtx.sampleRate;
+    const { primaryPitch, confidence, secondaryPitch, secondaryConfidence } =
+      this._detectPitchAutocorrelation(timeData, sampleRate);
+
+    const isVoicedSpeech = primaryPitch >= 80 && primaryPitch <= 350 && confidence > 0.35;
+
+    let isMultiVoiceAnomaly = false;
+
+    if (isVoicedSpeech) {
+      const now = Date.now();
+      this.pitchHistory.push({ pitch: primaryPitch, confidence, time: now });
+      if (this.pitchHistory.length > 12) this.pitchHistory.shift();
+
+      // Establish or update candidate's single-speaker baseline pitch
+      if (this.primaryPitchBaseline === null) {
+        this.primaryPitchBaseline = primaryPitch;
+      } else {
+        // Slow exponential moving average of dominant pitch
+        this.primaryPitchBaseline = 0.85 * this.primaryPitchBaseline + 0.15 * primaryPitch;
+      }
+
+      // Detection Check A: Simultaneous Two-Speaker Overlap (polyphonic dual correlation peaks)
+      if (secondaryPitch >= 80 && secondaryPitch <= 350 && secondaryConfidence > 0.40) {
+        const pitchDelta = Math.abs(primaryPitch - secondaryPitch);
+        const pitchRatio = Math.max(primaryPitch, secondaryPitch) / (Math.min(primaryPitch, secondaryPitch) + 1e-4);
+        // Exclude octave harmonics (~2.0 or ~0.5)
+        const isOctaveHarmonic = Math.abs(pitchRatio - 2.0) < 0.12 || Math.abs(pitchRatio - 3.0) < 0.15;
+        if (pitchDelta > 38 && !isOctaveHarmonic) {
+          isMultiVoiceAnomaly = true;
+          console.log(`[VoiceMonitor] Overlapping dual-speaker signature: ${Math.round(primaryPitch)}Hz & ${Math.round(secondaryPitch)}Hz`);
+        }
+      }
+
+      // Detection Check B: Alternating Disparate Speaker Shifts (>45 Hz delta from baseline)
+      if (this.pitchHistory.length >= 4) {
+        const pitches = this.pitchHistory.map((p) => p.pitch);
+        const minPitch = Math.min(...pitches);
+        const maxPitch = Math.max(...pitches);
+        const pitchSpan = maxPitch - minPitch;
+
+        // Calculate pitch variance
+        const meanPitch = pitches.reduce((a, b) => a + b, 0) / pitches.length;
+        const variance = pitches.reduce((acc, p) => acc + Math.pow(p - meanPitch, 2), 0) / pitches.length;
+        const stdDev = Math.sqrt(variance);
+
+        // A single speaker's standard deviation is typically < 18 Hz.
+        // Multiple alternating speakers result in high spread (stdDev > 26 Hz and span > 50 Hz)
+        if (stdDev > 26 && pitchSpan > 50) {
+          isMultiVoiceAnomaly = true;
+          console.log(`[VoiceMonitor] Conversational pitch dispersion: stdDev=${Math.round(stdDev)}Hz, span=${Math.round(pitchSpan)}Hz`);
+        }
+      }
+    }
+
+    // 3. Strike accumulator & security violation dispatch
+    if (isMultiVoiceAnomaly) {
+      this.strikes++;
+      console.log(`[VoiceMonitor] Anomaly detected (strike ${this.strikes}/${this.strikesToWarn})`);
+
+      if (this.strikes >= this.strikesToWarn) {
+        const now = Date.now();
+        if (now - this.lastWarningTime >= this.cooldownMs) {
+          this.lastWarningTime = now;
+          this.currentStatus = 'multiple_voices';
+          this.onViolation({
+            type: 'MULTIPLE_VOICES',
+            message: 'Multiple voices detected! Talking or external verbal assistance is strictly prohibited during the exam.',
+            dbfs: Math.round(dbfs),
+            level,
+            pitch: Math.round(primaryPitch),
+          });
+        }
+      }
+    } else {
+      if (this.strikes > 0) {
+        this.strikes = Math.max(0, this.strikes - 1);
+      }
+      if (Date.now() - this.lastWarningTime > 4000) {
+        this.currentStatus = isVoicedSpeech ? 'normal' : 'silent';
+      }
+    }
+
+    this.onStatusChange({
+      status: this.currentStatus,
+      level,
+      strikes: this.strikes,
+      dbfs: Math.round(dbfs),
+      pitch: Math.round(primaryPitch),
+    });
+  }
+
+  stop() {
+    this._destroyed = true;
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+    if (this.sourceNode) {
+      try { this.sourceNode.disconnect(); } catch (e) { void e; }
+      this.sourceNode = null;
+    }
+    if (this.analyser) {
+      try { this.analyser.disconnect(); } catch (e) { void e; }
+      this.analyser = null;
+    }
+    if (this.audioCtx && this.audioCtx.state !== 'closed') {
+      try { this.audioCtx.close(); } catch (e) { void e; }
+      this.audioCtx = null;
+    }
+  }
+}

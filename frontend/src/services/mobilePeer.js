@@ -72,19 +72,23 @@ export class MobilePeer {
     // Signal laptop that mobile is ready and streaming
     this.notifyReady();
 
-    // Periodic heartbeat to signal mobile-ready until WebRTC state is connected
+    // Limit heartbeat to at most 2 pulses to avoid renegotiation loops
+    let heartbeatCount = 0;
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     this.heartbeatTimer = setInterval(() => {
-      if (this._destroyed) {
+      if (this._destroyed || heartbeatCount >= 2) {
         clearInterval(this.heartbeatTimer);
+        this.heartbeatTimer = null;
         return;
       }
       if (this.pc && (this.pc.connectionState === 'connected' || this.pc.iceConnectionState === 'connected')) {
         clearInterval(this.heartbeatTimer);
+        this.heartbeatTimer = null;
         return;
       }
+      heartbeatCount++;
       this.notifyReady();
-    }, 2500);
+    }, 3000);
   }
 
   notifyReady() {
@@ -119,6 +123,10 @@ export class MobilePeer {
   _subscribeToOffer() {
     const unsub = subscribeToTopic('/topic/webrtc/' + this.sessionId + '/offer', async (payload) => {
       if (this._destroyed || !payload || !payload.sdp) return;
+      if (this.heartbeatTimer) {
+        clearInterval(this.heartbeatTimer);
+        this.heartbeatTimer = null;
+      }
       try {
         console.log('[MobilePeer] Received offer from laptop');
         if (this.pc) {
@@ -254,11 +262,13 @@ export class MobilePeer {
           clearInterval(this.heartbeatTimer);
           this.heartbeatTimer = null;
         }
-      } else if (state === 'failed' || state === 'disconnected') {
-        // Trigger renegotiation signal after brief pause
+      } else if (state === 'failed') {
+        // Trigger renegotiation signal after pause if connection failed
         setTimeout(() => {
-          if (!this._destroyed) this.notifyReady();
-        }, 2000);
+          if (!this._destroyed && this.pc && this.pc.connectionState === 'failed') {
+            this.notifyReady();
+          }
+        }, 3000);
       }
     };
 

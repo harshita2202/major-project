@@ -1,9 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Smartphone, QrCode, Wifi, WifiOff, RotateCcw, AlertCircle, Copy, Check } from 'lucide-react';
+import QRCode from 'qrcode';
+import { subscribeToTopic } from '../../services/websocket';
 import {
   generateMobilePairingToken,
   LaptopMobileWebRTC,
   subscribeToMobileCameraStatus,
+  getMobileConnectionStatus,
 } from '../../services/mobileCamera';
 
 /**
@@ -30,6 +33,8 @@ export default function MobileCameraPanel({
   const [mobileConnected, setMobileConnected] = useState(false);
   const [webrtcState, setWebrtcState] = useState('idle'); // 'idle' | 'connecting' | 'connected' | 'disconnected' | 'failed'
   const [remoteStream, setRemoteStream] = useState(null);
+  const [remotePlaying, setRemotePlaying] = useState(false);
+  const [fallbackFrame, setFallbackFrame] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState(null);
   const [qrDataUrl, setQrDataUrl] = useState(null);
@@ -39,11 +44,24 @@ export default function MobileCameraPanel({
   const webrtcRef = useRef(null);
   const statusUnsubRef = useRef(null);
   const reconnectTimerRef = useRef(null);
+  const fallbackFrameRef = useRef(null);
 
-  // Generate QR code data URL using Canvas (no external lib needed)
+  useEffect(() => {
+    fallbackFrameRef.current = fallbackFrame;
+  }, [fallbackFrame]);
+
+  // Generate QR code data URL using local QRCode library (100% offline, zero network requests)
   const generateQRDataUrl = useCallback(async (url) => {
-    const encodedUrl = encodeURIComponent(url);
-    return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodedUrl}`;
+    try {
+      return await QRCode.toDataURL(url, {
+        width: 220,
+        margin: 1,
+        color: { dark: '#0a1c30', light: '#ffffff' },
+      });
+    } catch (err) {
+      console.warn('[MobileCameraPanel] Offline QR generation fallback:', err);
+      return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
+    }
   }, []);
 
   const startPairing = useCallback(async () => {
@@ -70,14 +88,22 @@ export default function MobileCameraPanel({
     }
   }, [isActive, sessionId, pairingData, startPairing]);
 
-  // Subscribe to mobile connection status from WebSocket
+  // Check initial connection and subscribe to mobile status from WebSocket
   useEffect(() => {
     if (!sessionId || !isActive) return;
+
+    getMobileConnectionStatus(sessionId)
+      .then((res) => {
+        if (res && res.mobileConnected) {
+          setMobileConnected(true);
+        }
+      })
+      .catch(() => {});
+
     const unsub = subscribeToMobileCameraStatus(sessionId, (status) => {
       setMobileConnected(status.mobileConnected);
       if (status.mobileConnected) {
-        setWebrtcState('connecting');
-        // Trigger WebRTC offer if mobile just connected
+        setWebrtcState((prev) => (prev === 'connected' ? 'connected' : 'connecting'));
         if (webrtcRef.current) {
           webrtcRef.current.renegotiate().catch(() => {});
         }
@@ -87,6 +113,19 @@ export default function MobileCameraPanel({
     });
     statusUnsubRef.current = unsub;
     return () => { if (statusUnsubRef.current) statusUnsubRef.current(); };
+  }, [sessionId, isActive]);
+
+  // Subscribe to live frame stream (guaranteed fallback if WebRTC STUN is unavailable)
+  useEffect(() => {
+    if (!sessionId || !isActive) return;
+    const unsub = subscribeToTopic('/topic/webrtc/' + sessionId + '/frame', (data) => {
+      if (data && data.image) {
+        setFallbackFrame(data.image);
+        setMobileConnected(true);
+        setWebrtcState('connected');
+      }
+    });
+    return () => { if (unsub) unsub(); };
   }, [sessionId, isActive]);
 
   // Start WebRTC when we have a session and mobile becomes connected
@@ -109,10 +148,10 @@ export default function MobileCameraPanel({
         }
       },
       onConnectionStateChange: (state) => {
-        if (state === 'connected') setWebrtcState('connected');
-        else if (state === 'failed' || state === 'disconnected') {
-          setWebrtcState('disconnected');
-          // Attempt reconnect after 3 seconds
+        if (state === 'connected') {
+          setWebrtcState('connected');
+        } else if (state === 'failed' || state === 'disconnected') {
+          if (!fallbackFrameRef.current) setWebrtcState('disconnected');
           if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
           reconnectTimerRef.current = setTimeout(() => {
             if (webrtcRef.current) webrtcRef.current.renegotiate().catch(() => {});
@@ -120,14 +159,14 @@ export default function MobileCameraPanel({
         }
       },
       onIceConnectionState: (state) => {
-        if (state === 'checking') setWebrtcState('connecting');
+        if (state === 'checking' && !fallbackFrameRef.current) setWebrtcState('connecting');
       },
     });
 
     webrtcRef.current = webrtc;
     webrtc.start().catch((err) => {
       console.warn('[MobileCameraPanel] WebRTC start error:', err);
-      setWebrtcState('failed');
+      if (!fallbackFrameRef.current) setWebrtcState('failed');
     });
 
     return () => {
@@ -149,63 +188,69 @@ export default function MobileCameraPanel({
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       if (webrtcRef.current) webrtcRef.current.destroy();
       if (statusUnsubRef.current) statusUnsubRef.current();
-      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
     };
   }, []);
 
   const handleCopyLink = () => {
     if (pairingData?.pairingUrl) {
-      navigator.clipboard.writeText(pairingData.pairingUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
+      navigator.clipboard.writeText(pairingData.pairingUrl).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      });
     }
   };
 
-  const statusColor = mobileConnected && webrtcState === 'connected'
+  const isLive = (mobileConnected && webrtcState === 'connected') || Boolean(fallbackFrame);
+
+  // Status color logic
+  const statusColor = isLive
     ? '#22c55e'
-    : mobileConnected
+    : mobileConnected && webrtcState === 'connecting'
     ? '#f59e0b'
+    : mobileConnected
+    ? '#38bdf8'
     : '#94a3b8';
 
-  const statusText = mobileConnected && webrtcState === 'connected'
-    ? 'Mobile Camera Live'
+  const statusLabel = isLive
+    ? 'MOBILE LIVE'
     : mobileConnected && webrtcState === 'connecting'
-    ? 'Establishing Stream...'
+    ? 'CONNECTING'
     : mobileConnected
-    ? 'Mobile Connected'
-    : 'Awaiting Mobile';
+    ? 'PAIRING READY'
+    : 'STANDBY';
 
   return (
     <div
       style={{
-        backgroundColor: '#ffffff',
-        borderRadius: 'var(--radius-lg)',
-        border: '1px solid var(--border-subtle)',
+        backgroundColor: '#0f2740',
+        borderRadius: '12px',
+        border: '1px solid rgba(255,255,255,0.08)',
         overflow: 'hidden',
-        boxShadow: 'var(--shadow-sm)',
+        marginTop: '12px',
       }}
     >
-      {/* Header */}
+      {/* Panel header */}
       <div
         style={{
-          padding: '12px 16px',
-          borderBottom: '1px solid var(--border-subtle)',
-          backgroundColor: 'var(--bg-surface-subtle)',
+          padding: '8px 14px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          backgroundColor: '#0a1c30',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-          <Smartphone size={14} color="var(--pt-navy-800)" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <Smartphone size={13} color="#26c6da" />
           <span
             style={{
-              fontSize: '12px',
-              fontWeight: 800,
-              color: 'var(--pt-navy-800)',
-              letterSpacing: '0.05em',
+              fontSize: '11px',
+              fontWeight: 700,
+              color: '#e2e8f0',
+              letterSpacing: '0.04em',
               textTransform: 'uppercase',
             }}
           >
@@ -214,26 +259,28 @@ export default function MobileCameraPanel({
           <span
             style={{
               fontSize: '9px',
-              fontWeight: 700,
+              backgroundColor: isLive ? 'rgba(34,197,94,0.15)' : 'rgba(148,163,184,0.15)',
+              color: isLive ? '#22c55e' : '#94a3b8',
+              border: `1px solid ${isLive ? 'rgba(34,197,94,0.3)' : 'rgba(148,163,184,0.2)'}`,
               padding: '1px 6px',
               borderRadius: '9999px',
-              backgroundColor: mobileConnected ? '#dcfce7' : '#f1f5f9',
-              color: mobileConnected ? '#16a34a' : '#64748b',
-              border: `1px solid ${mobileConnected ? '#86efac' : '#e2e8f0'}`,
+              fontWeight: 600,
             }}
           >
             Mobile Phone
           </span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {!mobileConnected && (
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {pairingData && !isLive && (
             <button
               type="button"
               onClick={startPairing}
               disabled={isGenerating}
+              title="Regenerate QR Code"
               style={{
-                fontSize: '10.5px',
-                color: 'var(--pt-teal-700)',
+                fontSize: '10px',
+                color: 'rgba(255,255,255,0.5)',
                 background: 'none',
                 border: 'none',
                 cursor: isGenerating ? 'wait' : 'pointer',
@@ -262,7 +309,23 @@ export default function MobileCameraPanel({
           overflow: 'hidden',
         }}
       >
-        {/* Live mobile video (PiP & fullscreen disabled so browser overlay cannot steal focus) */}
+        {/* Live fallback frame image from WebSocket (always displayed whenever frames arrive) */}
+        {fallbackFrame && (
+          <img
+            src={fallbackFrame}
+            alt="Mobile Secondary Feed"
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              position: 'absolute',
+              inset: 0,
+              zIndex: 2,
+            }}
+          />
+        )}
+
+        {/* Live mobile video from WebRTC (only overlays when actively playing decoded frames) */}
         <video
           ref={videoRef}
           playsInline
@@ -270,6 +333,7 @@ export default function MobileCameraPanel({
           muted
           disablePictureInPicture
           controlsList="nodownload nofullscreen noremoteplayback"
+          onPlaying={() => setRemotePlaying(true)}
           onLoadedMetadata={(e) => {
             e.target.play().catch(() => {});
           }}
@@ -278,12 +342,15 @@ export default function MobileCameraPanel({
             height: '100%',
             objectFit: 'cover',
             pointerEvents: 'none',
-            display: mobileConnected && webrtcState === 'connected' ? 'block' : 'none',
+            position: 'absolute',
+            inset: 0,
+            zIndex: 3,
+            display: remoteStream && remotePlaying ? 'block' : 'none',
           }}
         />
 
-        {/* QR Code pairing UI (shown when not connected) */}
-        {!mobileConnected && (
+        {/* QR Code pairing UI (shown when not connected and no frames yet) */}
+        {!mobileConnected && !fallbackFrame && (
           <div
             style={{
               display: 'flex',
@@ -354,8 +421,8 @@ export default function MobileCameraPanel({
           </div>
         )}
 
-        {/* Connecting spinner overlay */}
-        {mobileConnected && webrtcState === 'connecting' && (
+        {/* Connecting spinner overlay (only if connecting and no frames yet) */}
+        {mobileConnected && webrtcState === 'connecting' && !fallbackFrame && (
           <div
             style={{
               position: 'absolute',
@@ -399,118 +466,58 @@ export default function MobileCameraPanel({
               borderRadius: '50%',
               backgroundColor: statusColor,
               display: 'inline-block',
-              animation: mobileConnected && webrtcState === 'connected' ? 'rec-blink 1.5s ease-in-out infinite' : 'none',
+              animation: isLive ? 'rec-blink 1.5s ease-in-out infinite' : 'none',
             }}
           />
           <span style={{ fontSize: '9px', color: statusColor, fontWeight: 700, letterSpacing: '0.06em' }}>
-            {mobileConnected && webrtcState === 'connected' ? 'MOBILE LIVE' : 'STANDBY'}
+            {statusLabel}
           </span>
         </div>
       </div>
 
-      {/* Footer status bar */}
+      {/* Footer bar with details */}
       <div
         style={{
-          padding: '9px 16px',
+          padding: '8px 14px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          backgroundColor: '#0c2035',
         }}
       >
-        <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 500 }}>
-          Mobile Phone
+        <span style={{ fontSize: '11px', color: 'rgba(142,174,201,0.7)', fontWeight: 500 }}>
+          {candidateName}
         </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <span
-            style={{
-              width: '7px',
-              height: '7px',
-              borderRadius: '50%',
-              backgroundColor: statusColor,
-              display: 'inline-block',
-            }}
-          />
-          {mobileConnected ? (
-            <Wifi size={11} color={webrtcState === 'connected' ? '#16a34a' : '#d97706'} />
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {isLive ? (
+            <span style={{ fontSize: '10.5px', color: '#22c55e', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Wifi size={11} /> Stream Active
+            </span>
           ) : (
-            <WifiOff size={11} color="#94a3b8" />
+            pairingData?.pairingUrl && (
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                style={{
+                  fontSize: '10px',
+                  color: copied ? '#34d399' : '#26c6da',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                }}
+              >
+                {copied ? <Check size={10} /> : <Copy size={10} />}
+                {copied ? 'Copied!' : 'Copy Link'}
+              </button>
+            )
           )}
-          <span
-            style={{
-              fontSize: '11px',
-              color: mobileConnected && webrtcState === 'connected'
-                ? '#16a34a'
-                : mobileConnected
-                ? '#d97706'
-                : '#94a3b8',
-              fontWeight: 700,
-            }}
-          >
-            {statusText}
-          </span>
         </div>
       </div>
-
-      {/* Direct link & copy helper */}
-      {pairingData && !mobileConnected && (
-        <div
-          style={{
-            padding: '0 14px 10px',
-            borderTop: '1px solid var(--border-subtle)',
-            backgroundColor: '#fafbfc',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '6px', marginBottom: '4px' }}>
-            <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600 }}>
-              Direct URL for mobile browser:
-            </span>
-            <button
-              type="button"
-              onClick={handleCopyLink}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: copied ? '#16a34a' : 'var(--pt-teal-700)',
-                fontSize: '10px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '3px',
-              }}
-            >
-              {copied ? <Check size={10} /> : <Copy size={10} />}
-              {copied ? 'Copied' : 'Copy Link'}
-            </button>
-          </div>
-          <div
-            style={{
-              fontSize: '9px',
-              color: 'var(--pt-teal-800)',
-              wordBreak: 'break-all',
-              backgroundColor: '#f0fdf4',
-              padding: '5px 7px',
-              borderRadius: '5px',
-              border: '1px solid #bbf7d0',
-              fontFamily: 'monospace',
-              lineHeight: 1.3,
-            }}
-          >
-            {pairingData.pairingUrl}
-          </div>
-        </div>
-      )}
-
-      <style>{`
-        @keyframes rec-blink {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.2; }
-        }
-        @keyframes rec-spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   );
 }

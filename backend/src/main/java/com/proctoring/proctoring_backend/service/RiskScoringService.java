@@ -54,6 +54,9 @@ public class RiskScoringService {
     public static final String WARNING_NETWORK =
             "Network connection was interrupted. Please maintain a stable connection.";
 
+    public static final String WARNING_VOICE =
+            "Multiple voices detected. External verbal communication or assistance is strictly prohibited.";
+
     /**
      * Calculate point weight based on proctoring event type.
      * LOW-RISK EVENTS:
@@ -81,6 +84,7 @@ public class RiskScoringService {
             case "SHORTCUT_ATTEMPT", "KEYBOARD_SHORTCUT", "KEYBOARD_SHORTCUT_ATTEMPT" -> 5;
             case "FULLSCREEN_EXIT" -> 10;
             case "TAB_SWITCH" -> 15;
+            case "MULTIPLE_VOICES", "MULTIPLE_VOICE", "VOICE_WARNING", "AUDIO_ANOMALY" -> 15;
             case "COPY_ATTEMPT", "COPY", "CUT_ATTEMPT", "CUT" -> 20;
             case "PASTE_ATTEMPT", "PASTE", "CLIPBOARD_PASTE_ATTEMPT" -> 20;
             default -> 10;
@@ -119,6 +123,7 @@ public class RiskScoringService {
             case "SILENT_MIC", "MIC_MUTED" -> WARNING_SILENT_MIC;
             case "LONG_INACTIVITY", "INACTIVITY" -> WARNING_LONG_INACTIVITY;
             case "NETWORK_INTERRUPTION", "NETWORK_DISCONNECTION", "NETWORK" -> WARNING_NETWORK;
+            case "MULTIPLE_VOICES", "MULTIPLE_VOICE", "VOICE_WARNING", "AUDIO_ANOMALY" -> WARNING_VOICE;
             default -> "Please follow examination rules. Further violations may result in automatic exam submission.";
         };
     }

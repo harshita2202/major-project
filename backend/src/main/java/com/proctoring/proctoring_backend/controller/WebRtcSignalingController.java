@@ -97,4 +97,10 @@ public class WebRtcSignalingController {
     public void relayIceProctorMobile(@DestinationVariable String sessionId, Map<String, Object> payload) {
         messagingTemplate.convertAndSend("/topic/webrtc/" + sessionId + "/ice-proctor-mobile", (Object) payload);
     }
+
+    /** Mobile -> Laptop/Proctor: Live Frame fallback for low-latency / offline stream */
+    @MessageMapping("/webrtc/{sessionId}/frame")
+    public void relayMobileFrame(@DestinationVariable String sessionId, Map<String, Object> payload) {
+        messagingTemplate.convertAndSend("/topic/webrtc/" + sessionId + "/frame", (Object) payload);
+    }
 }

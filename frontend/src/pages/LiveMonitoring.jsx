@@ -61,6 +61,12 @@ export default function LiveMonitoring() {
             status: newStatus,
             checks: {
               ...(c.checks || {}),
+              audio: (update.eventType === 'MULTIPLE_VOICES' || update.eventType === 'AUDIO_ANOMALY' || update.eventType === 'VOICE_WARNING')
+                ? 'Multiple Voices'
+                : (c.checks?.audio || 'Normal'),
+              audioStatus: (update.eventType === 'MULTIPLE_VOICES' || update.eventType === 'AUDIO_ANOMALY' || update.eventType === 'VOICE_WARNING')
+                ? 'danger'
+                : (c.checks?.audioStatus || 'normal'),
               tabSwitch: (update.eventType === 'TAB_SWITCH' || update.eventType === 'TAB_SWITCH_ATTEMPT')
                 ? ((c.checks?.tabSwitch || 0) + 1)
                 : (c.checks?.tabSwitch || 0)

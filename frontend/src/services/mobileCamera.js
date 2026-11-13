@@ -177,6 +177,9 @@ export class LaptopMobileWebRTC {
     // Subscribe to mobile-ready notification
     const unsubReady = subscribeToTopic('/topic/webrtc/' + this.sessionId + '/mobile-ready', async () => {
       if (this._destroyed) return;
+      if (this.pc && (this.pc.connectionState === 'connected' || this.pc.iceConnectionState === 'connected' || this.pc.iceConnectionState === 'completed' || this.isNegotiating)) {
+        return;
+      }
       console.log('[MobileWebRTC] Received mobile-ready notification from phone');
       this.renegotiate();
     });

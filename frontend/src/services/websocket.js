@@ -49,6 +49,7 @@ export function getWebSocketClient() {
         }
       },
       onDisconnect: () => {
+        isConnecting = false;
         connectionListeners.forEach((listener) => {
           try {
             listener(false);
@@ -58,10 +59,15 @@ export function getWebSocketClient() {
         });
       },
       onStompError: (frame) => {
+        isConnecting = false;
         console.warn('STOMP error:', frame.headers['message'], frame.body);
       },
       onWebSocketError: (err) => {
+        isConnecting = false;
         console.warn('WebSocket connection error:', err);
+      },
+      onWebSocketClose: () => {
+        isConnecting = false;
       },
     });
   }

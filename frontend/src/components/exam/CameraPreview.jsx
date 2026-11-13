@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Camera, Video, VideoOff, RefreshCw, AlertCircle } from 'lucide-react';
+import { Camera, Video, VideoOff, RefreshCw, AlertCircle, Mic, MicOff } from 'lucide-react';
+import { VoiceMonitor } from '../../services/voiceAnalysis';
 import { analyzeGazeFrame } from '../../services/gazeAnalysis';
 
 const STARTUP_GRACE_MS = 6000; // 6s initial warm-up when exam/camera starts
@@ -124,12 +125,16 @@ export default function CameraPreview({
   sessionId,
   isActive = true,
   onGazeEvent,
+  onVoiceEvent,
   gazeEnabled = true,
 }) {
   const [streamActive, setStreamActive] = useState(false);
   const [cameraError, setCameraError] = useState(null);
   const [isStarting, setIsStarting] = useState(false);
   const [gazeResult, setGazeResult] = useState(null);
+  const [voiceState, setVoiceState] = useState({ status: 'silent', level: 0, strikes: 0 });
+  const [hasAudioTrack, setHasAudioTrack] = useState(false);
+  const voiceMonitorRef = useRef(null);
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
@@ -144,13 +149,18 @@ export default function CameraPreview({
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
+    if (voiceMonitorRef.current) {
+      voiceMonitorRef.current.stop();
+      voiceMonitorRef.current = null;
+    }
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
     setStreamActive(false);
+    setHasAudioTrack(false);
   };
 
-  // Start media stream
+  // Start media stream (guaranteed video first, non-blocking audio)
   const startStream = async () => {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setCameraError('Webcam API is not supported in this browser.');
@@ -161,29 +171,52 @@ export default function CameraPreview({
     setCameraError(null);
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-          facingMode: 'user',
-        },
-        audio: false,
-      });
+      let stream;
+      try {
+        // Request webcam and microphone together in a single prompt
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+          audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: true },
+        });
+      } catch (comboErr) {
+        console.warn('[CameraPreview] Combined AV request failed, falling back to video only:', comboErr);
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+          audio: false,
+        });
+      }
 
       streamRef.current = stream;
       streamStartedAtRef.current = Date.now();
       countersRef.current = { away: 0, noFace: 0, multiFace: 0 };
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play().catch((playErr) => {
-          void playErr;
-        });
+        videoRef.current.play().catch(() => {});
       }
       setStreamActive(true);
+      setCameraError(null);
+
+      const hasAudio = stream.getAudioTracks().length > 0;
+      setHasAudioTrack(hasAudio);
+
+      // If combined request only got video (mic was omitted), try background mic request
+      if (!hasAudio) {
+        navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: true },
+          video: false,
+        }).then((audioStream) => {
+          audioStream.getAudioTracks().forEach((track) => {
+            stream.addTrack(track);
+          });
+          setHasAudioTrack(true);
+        }).catch((audioErr) => {
+          console.warn('[CameraPreview] Separate mic request skipped/denied:', audioErr);
+        });
+      }
     } catch (err) {
       let msg = 'Could not access webcam.';
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        msg = 'Camera access denied by user/browser.';
+        msg = 'Camera permission denied by browser.';
       } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
         msg = 'No camera hardware detected on device.';
       } else if (err.name === 'NotReadableError') {
@@ -191,57 +224,52 @@ export default function CameraPreview({
       }
       setCameraError(msg);
       setStreamActive(false);
+    setHasAudioTrack(false);
     } finally {
       setIsStarting(false);
     }
   };
 
-  // When active exam starts, attempt camera stream connection asynchronously
+  // When active exam starts, attempt camera stream connection
   useEffect(() => {
-    let cancelled = false;
     if (isActive && !streamRef.current) {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        navigator.mediaDevices
-          .getUserMedia({
-            video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
-            audio: false,
-          })
-          .then((stream) => {
-            if (cancelled) {
-              stream.getTracks().forEach((t) => t.stop());
-              return;
-            }
-            streamRef.current = stream;
-            streamStartedAtRef.current = Date.now();
-            countersRef.current = { away: 0, noFace: 0, multiFace: 0 };
-            if (videoRef.current) {
-              videoRef.current.srcObject = stream;
-              videoRef.current.play().catch((e) => void e);
-            }
-            setStreamActive(true);
-          })
-          .catch((err) => {
-            if (!cancelled) {
-              let msg = 'Could not access webcam.';
-              if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-                msg = 'Camera permission denied by browser.';
-              } else if (err.name === 'NotFoundError') {
-                msg = 'No camera hardware found.';
-              }
-              setCameraError(msg);
-            }
-          });
+      startStream();
+    }
+  }, [isActive]);
+
+  // Clean up media streams only on true component unmount
+  useEffect(() => {
+    return () => {
+      stopStream();
+    };
+  }, []);
+
+  // Real-Time Multi-Voice Detection Monitor
+  useEffect(() => {
+    if (streamActive && streamRef.current && isActive) {
+      const audioTracks = streamRef.current.getAudioTracks();
+      if (audioTracks.length > 0) {
+        if (voiceMonitorRef.current) {
+          voiceMonitorRef.current.stop();
+        }
+        voiceMonitorRef.current = new VoiceMonitor(streamRef.current, {
+          onViolation: (evt) => {
+            console.log('[CameraPreview] Voice violation detected:', evt);
+            if (onVoiceEvent) onVoiceEvent(evt);
+          },
+          onStatusChange: (st) => {
+            setVoiceState(st);
+          },
+        });
       }
     }
-
     return () => {
-      cancelled = true;
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
+      if (voiceMonitorRef.current) {
+        voiceMonitorRef.current.stop();
+        voiceMonitorRef.current = null;
       }
     };
-  }, [isActive]);
+  }, [streamActive, isActive, hasAudioTrack, onVoiceEvent]);
 
   // When streamActive changes, ensure video element is bound
   useEffect(() => {
@@ -630,6 +658,55 @@ export default function CameraPreview({
                 }}
               >
                 {getGazeStatusLabel()}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {streamActive && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '2px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              {voiceState.status === 'multiple_voices' ? (
+                <MicOff size={13} color="#ef4444" />
+              ) : (
+                <Mic size={13} color={voiceState.level > 0.05 ? '#22c55e' : 'var(--text-muted)'} />
+              )}
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                Voice Detection
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: '10px' }}>
+                {[0.15, 0.35, 0.55, 0.75].map((thresh, idx) => (
+                  <span
+                    key={idx}
+                    style={{
+                      width: '2.5px',
+                      height: `${Math.max(3, (idx + 1) * 2.5)}px`,
+                      backgroundColor: voiceState.level >= thresh
+                        ? (voiceState.status === 'multiple_voices' ? '#ef4444' : '#22c55e')
+                        : 'rgba(255,255,255,0.15)',
+                      borderRadius: '1px',
+                    }}
+                  />
+                ))}
+              </div>
+              <span
+                style={{
+                  fontSize: '11px',
+                  color: voiceState.status === 'multiple_voices'
+                    ? '#dc2626'
+                    : voiceState.status === 'normal'
+                    ? '#16a34a'
+                    : 'var(--text-muted)',
+                  fontWeight: 600,
+                }}
+              >
+                {voiceState.status === 'multiple_voices'
+                  ? 'Multiple Voices'
+                  : voiceState.status === 'normal'
+                  ? 'Voice Normal'
+                  : 'Quiet'}
               </span>
             </div>
           </div>

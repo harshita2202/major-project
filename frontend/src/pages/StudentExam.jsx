@@ -483,13 +483,13 @@ export default function StudentExam() {
     const isSilentMic = voiceData?.eventType === 'SILENT_MIC';
     const eventType = isSilentMic
       ? SECURITY_EVENT_TYPE.SILENT_MIC
-      : SECURITY_EVENT_TYPE.VOICE_WARNING;
-    const severity = isSilentMic ? SECURITY_SEVERITY.LOW : SECURITY_SEVERITY.MEDIUM;
+      : (SECURITY_EVENT_TYPE.MULTIPLE_VOICES || SECURITY_EVENT_TYPE.VOICE_WARNING);
+    const severity = isSilentMic ? SECURITY_SEVERITY.LOW : SECURITY_SEVERITY.HIGH;
     const detailMsg =
       voiceData?.message ||
       (isSilentMic
         ? 'Microphone appears to be silent or muted. Please keep your microphone active.'
-        : 'Multiple or unrecognized voice detected during the examination. Please ensure you are alone and silent.');
+        : 'Multiple voices detected! Talking or external verbal assistance is strictly prohibited during the exam.');
     const voiceEvent = {
       ...createSecurityEvent(eventType, severity, detailMsg),
       customWarning: detailMsg,
@@ -1817,6 +1817,7 @@ export default function StudentExam() {
               sessionId={sessionId || examMeta.candidateId}
               isActive={phase === PHASE.ACTIVE}
               onGazeEvent={handleGazeEvent}
+              onVoiceEvent={handleVoiceEvent}
               gazeEnabled={phase === PHASE.ACTIVE}
             />
             <VoiceMonitorPanel
@@ -1827,7 +1828,7 @@ export default function StudentExam() {
               onVoiceEvent={handleVoiceEvent}
             />
             <MobileCameraPanel
-              sessionId={sessionId}
+              sessionId={sessionId || (currentUser?.userId ? ('session-' + examId + '-' + currentUser.userId) : null)}
               examId={examId}
               candidateId={examMeta.candidateId || currentUser?.userId || 'STU001'}
               candidateName={examMeta.candidateName || currentUser?.name || 'Candidate'}
