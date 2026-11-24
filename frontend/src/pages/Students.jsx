@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Users, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Users, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
 import StatusBadge from '../components/common/StatusBadge';
 import RiskBadge from '../components/common/RiskBadge';
 import SearchBar from '../components/common/SearchBar';
 import EmptyState from '../components/common/EmptyState';
 import LoadingSpinner from '../components/common/LoadingSpinner';
+import StudentAuditLogModal from '../components/monitoring/StudentAuditLogModal';
 import { getStudents } from '../services/api';
 
 export default function Students() {
@@ -14,6 +15,7 @@ export default function Students() {
   const [riskFilter, setRiskFilter] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedStudentForLogs, setSelectedStudentForLogs] = useState(null);
   const itemsPerPage = 8;
 
   useEffect(() => {
@@ -68,119 +70,104 @@ export default function Students() {
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Top Header */}
-      <div>
-        <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--pt-navy-900)', margin: 0, letterSpacing: '-0.02em' }}>
-          Candidate Enrollment & ProctorID™ Directory
-        </h2>
-        <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginTop: '3px', margin: 0 }}>
-          Biometric profiles, identity verification records, and ProctorTrack™ compliance ratings
-        </p>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+        <div>
+          <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+            Registered Candidates Directory
+          </h2>
+          <p style={{ fontSize: '13px', color: '#64748b', margin: '4px 0 0 0' }}>
+            Comprehensive student roster, identity verification status, and historical proctoring audit trails.
+          </p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '13px', fontWeight: 600, color: '#0f172a' }}>
+            {filteredStudents.length} Candidates Enrolled
+          </span>
+        </div>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '16px'
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          {/* Status Filter */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Status:</span>
-            {['All', 'Online', 'Offline', 'Completed'].map((st) => (
-              <button
-                key={st}
-                type="button"
-                onClick={() => {
-                  setStatusFilter(st);
-                  setCurrentPage(1);
-                }}
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: '7px',
-                  fontSize: '12px',
-                  fontWeight: statusFilter === st ? 700 : 500,
-                  border: '1px solid',
-                  borderColor: statusFilter === st ? 'var(--pt-navy-800)' : 'var(--border-subtle)',
-                  backgroundColor: statusFilter === st ? 'var(--pt-navy-800)' : '#ffffff',
-                  color: statusFilter === st ? '#ffffff' : 'var(--text-secondary)',
-                  cursor: 'pointer'
-                }}
-              >
-                {st}
-              </button>
-            ))}
+      {/* Main Table Card */}
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        {/* Table Filters & Search */}
+        <div
+          style={{
+            padding: '16px 20px',
+            borderBottom: '1px solid var(--border-subtle)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px'
+          }}
+        >
+          <div style={{ width: '280px' }}>
+            <SearchBar
+              value={searchTerm}
+              onChange={setSearchTerm}
+              placeholder="Search by student name, email, or exam..."
+            />
           </div>
 
-          {/* Risk Filter */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '10px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Risk:</span>
-            {['All', 'Low', 'Medium', 'High'].map((rk) => (
-              <button
-                key={rk}
-                type="button"
-                onClick={() => {
-                  setRiskFilter(rk);
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {/* Status Filter */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Status:</span>
+              <select
+                className="select"
+                style={{ padding: '6px 10px', fontSize: '12px', width: 'auto' }}
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
                   setCurrentPage(1);
                 }}
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: '7px',
-                  fontSize: '12px',
-                  fontWeight: riskFilter === rk ? 700 : 500,
-                  border: '1px solid',
-                  borderColor: riskFilter === rk ? 'var(--pt-navy-800)' : 'var(--border-subtle)',
-                  backgroundColor: riskFilter === rk ? 'var(--pt-navy-800)' : '#ffffff',
-                  color: riskFilter === rk ? '#ffffff' : 'var(--text-secondary)',
-                  cursor: 'pointer'
+              >
+                <option value="All">All Statuses</option>
+                <option value="active">Active</option>
+                <option value="idle">Idle</option>
+                <option value="completed">Completed</option>
+                <option value="disqualified">Disqualified</option>
+              </select>
+            </div>
+
+            {/* Risk Tier Filter */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Risk:</span>
+              <select
+                className="select"
+                style={{ padding: '6px 10px', fontSize: '12px', width: 'auto' }}
+                value={riskFilter}
+                onChange={(e) => {
+                  setRiskFilter(e.target.value);
+                  setCurrentPage(1);
                 }}
               >
-                {rk}
-              </button>
-            ))}
+                <option value="All">All Risk Tiers</option>
+                <option value="low">Low Risk</option>
+                <option value="medium">Medium Risk</option>
+                <option value="high">High Risk</option>
+              </select>
+            </div>
           </div>
         </div>
 
-        <SearchBar
-          value={searchTerm}
-          onChange={(val) => {
-            setSearchTerm(val);
-            setCurrentPage(1);
-          }}
-          placeholder="Search by student name or email..."
-          maxWidth="280px"
-        />
-      </div>
-
-      {/* Students Table */}
-      <div className="card">
+        {/* Students Table */}
         {filteredStudents.length === 0 ? (
           <EmptyState
             icon={Users}
-            title="No Candidates Found"
-            description="No candidates matched your search criteria."
-            actionText="Reset Filters"
-            onAction={() => {
-              setStatusFilter('All');
-              setRiskFilter('All');
-              setSearchTerm('');
-            }}
+            title="No candidates match query"
+            description="Adjust your search query or reset the filters to view registered candidates."
           />
         ) : (
-          <div className="table-responsive">
-            <table className="data-table">
+          <div style={{ overflowX: 'auto' }}>
+            <table className="table">
               <thead>
                 <tr>
-                  <th>Student Name</th>
-                  <th>Registered Exam</th>
+                  <th>Candidate</th>
+                  <th>Assigned Exam</th>
                   <th>Status</th>
-                  <th>Risk Level</th>
-                  <th>Last Activity</th>
-                  <th style={{ textAlign: 'right' }}>Actions</th>
+                  <th>Risk Tier</th>
+                  <th>Last Telemetry Sync</th>
+                  <th style={{ textAlign: 'right' }}>Audit Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -212,8 +199,14 @@ export default function Students() {
                       </span>
                     </td>
                     <td style={{ textAlign: 'right' }}>
-                      <button type="button" className="btn btn-secondary btn-sm">
-                        Audit Log
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => setSelectedStudentForLogs(s)}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                      >
+                        <FileText size={13} color="#2563eb" />
+                        <span>Audit Log</span>
                       </button>
                     </td>
                   </tr>
@@ -268,6 +261,15 @@ export default function Students() {
           </div>
         )}
       </div>
+
+      {/* Student Audit Log & Evidence Modal */}
+      {selectedStudentForLogs && (
+        <StudentAuditLogModal
+          student={selectedStudentForLogs}
+          isOpen={Boolean(selectedStudentForLogs)}
+          onClose={() => setSelectedStudentForLogs(null)}
+        />
+      )}
     </div>
   );
 }

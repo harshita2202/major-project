@@ -23,7 +23,7 @@ public class ProctoringEvent {
     private String candidateId;
 
     @Column(name = "event_type", nullable = false)
-    private String eventType; // CLIPBOARD_PASTE_ATTEMPT, TAB_SWITCH, FULLSCREEN_EXIT, etc.
+    private String eventType; // CLIPBOARD_PASTE_ATTEMPT, TAB_SWITCH, FULLSCREEN_EXIT, MULTIPLE_FACES, etc.
 
     @Column(nullable = false)
     private String severity; // "low", "medium", "high", "critical"
@@ -33,6 +33,9 @@ public class ProctoringEvent {
 
     @Column(columnDefinition = "TEXT")
     private String metadata; // JSON or additional context (e.g. key combo, window info)
+
+    @Column(name = "snapshot", columnDefinition = "TEXT")
+    private String snapshot; // Captured camera frame (base64 image) for evidence
 
     @Column(name = "points_added")
     private Integer pointsAdded = 0;
@@ -93,6 +96,9 @@ public class ProctoringEvent {
 
     public String getMetadata() { return metadata; }
     public void setMetadata(String metadata) { this.metadata = metadata; }
+
+    public String getSnapshot() { return snapshot; }
+    public void setSnapshot(String snapshot) { this.snapshot = snapshot; }
 
     public int getPointsAdded() { return pointsAdded != null ? pointsAdded : 0; }
     public void setPointsAdded(Integer pointsAdded) { this.pointsAdded = pointsAdded != null ? pointsAdded : 0; }

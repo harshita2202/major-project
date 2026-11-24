@@ -171,6 +171,7 @@ public class ProctoringEventService {
                 featureWarning,
                 eventTime
         );
+        event.setSnapshot(request.getSnapshot());
         proctoringEventRepository.save(event);
 
         // 5. Update Candidate monitor record if exists
@@ -203,6 +204,13 @@ public class ProctoringEventService {
 
     public List<ProctoringEventResponse> getEventsBySessionId(String sessionId) {
         return proctoringEventRepository.findBySessionIdOrderByTimestampDesc(sessionId)
+                .stream()
+                .map(ProctoringEventResponse::fromEntity)
+                .toList();
+    }
+
+    public List<ProctoringEventResponse> getEventsByCandidateId(String candidateId) {
+        return proctoringEventRepository.findByCandidateIdOrderByTimestampDesc(candidateId)
                 .stream()
                 .map(ProctoringEventResponse::fromEntity)
                 .toList();
@@ -290,6 +298,7 @@ public class ProctoringEventService {
                     "pending",
                     details
             );
+            violation.setSnapshot(event.getSnapshot());
             violationRepository.save(violation);
 
             SecurityEventEntity secEvent = new SecurityEventEntity(

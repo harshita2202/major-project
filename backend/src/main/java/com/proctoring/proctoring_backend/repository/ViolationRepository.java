@@ -8,4 +8,5 @@ import java.util.List;
 @Repository
 public interface ViolationRepository extends JpaRepository<Violation, String> {
     List<Violation> findTop10ByOrderByIdDesc();
+    List<Violation> findByCandidateIdOrderByIdDesc(String candidateId);
 }

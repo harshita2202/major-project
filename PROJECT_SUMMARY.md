@@ -189,3 +189,28 @@ Major/
 | :--- | :--- | :--- | :--- |
 | **Student** | `STU001` (or any `STU*` ID) | `student123` | [https://localhost:5173/student-login](https://localhost:5173/student-login) |
 | **Invigilator / Admin** | `admin` | `admin123` | [https://localhost:5173/invigilator-login](https://localhost:5173/invigilator-login) |
+
+
+---
+
+## 9. Student-Wise Logs & Multiple Faces Evidence Screenshot Capture
+
+### 9.1 Overview & Architecture
+To empower invigilators and academic committees with indisputable evidence during exams, the platform now automatically captures webcam photo snapshots the exact second multiple faces are detected, and organizes all proctoring telemetry student-by-student in the Admin Dashboard.
+
+### 9.2 Key Capabilities Added:
+1. **Instant Camera Snapshot on Multiple Faces Detection:**
+   - Whenever the primary webcam detects more than one face (`MULTIPLE_FACES` or `face_count > 1`), a canvas frame snapshot (`image/jpeg`, base64) is captured instantly from the live camera feed.
+   - Throttled intelligently to prevent flooding while ensuring every distinct multi-face incident is visually recorded.
+2. **Backend Biometric Snapshot Persistence:**
+   - Both `proctoring_events` and `violations` tables in PostgreSQL feature a dedicated `snapshot TEXT` column.
+   - `ProctoringEventRequest`, `ProctoringEventResponse`, and `Violation` entities serialize and store the base64 screenshot evidence.
+3. **Student-Wise API Endpoints:**
+   - `GET /api/candidates/{candidateId}/events`: Returns chronological events and snapshots for any candidate.
+   - `GET /api/students/{studentId}/events`: Alias endpoint for student roster audit log retrieval.
+   - `GET /api/violations/candidate/{candidateId}`: Returns filtered violations for candidate.
+4. **Admin Dashboard Student-Wise Evidence UI:**
+   - **`EvidenceSnapshotModal.jsx`**: An enlarged high-resolution inspection modal with zoom in/out, candidate details, timestamp, risk penalty, and 1-click evidence download.
+   - **`StudentAuditLogModal.jsx`**: A dedicated filterable modal (All Logs, Multiple Faces Only, High Severity, Voice Infractions) accessible with 1 click from the Candidate Directory (`/students`).
+   - **`StudentWiseLogsCard.jsx`**: Placed directly on the main Invigilator Dashboard (`/dashboard`) allowing invigilators to filter by candidate and review multiple face detection snapshots on demand.
+   - **`CandidateDetailModal.jsx` & `MonitoringTimeline.jsx`**: Enhanced with direct evidence thumbnails and `[📸 View Multiple Faces Photo]` buttons during live monitoring.

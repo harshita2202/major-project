@@ -1012,6 +1012,9 @@ public class ExamController {
         eventReq.setEventType(type);
         eventReq.setSeverity(severity);
         eventReq.setDetails(message);
+        if (payload.containsKey("snapshot") && payload.get("snapshot") != null) {
+            eventReq.setSnapshot((String) payload.get("snapshot"));
+        }
 
         com.proctoring.proctoring_backend.dto.ProctoringEventResponse savedEvent =
                 proctoringEventService.recordEvent(eventReq);

@@ -401,7 +401,8 @@ export default function StudentExam() {
       studentName: examMeta.candidateName || currentUser?.name || 'Alex Morgan',
       type: event.type,
       severity: event.severity,
-      message: event.message
+      message: event.message,
+      snapshot: event.snapshot || null
     }).then((res) => {
       if (!res) return;
 

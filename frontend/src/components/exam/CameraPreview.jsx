@@ -319,6 +319,10 @@ export default function CameraPreview({
           setGazeResult(sanitized);
 
           if (sanitized.is_suspicious && onGazeEvent) {
+            const isMultiFace = sanitized.gaze_direction === 'MULTIPLE_FACES' || (typeof rawResult.face_count === 'number' && rawResult.face_count > 1);
+            if (isMultiFace) {
+              sanitized.snapshot = base64Image;
+            }
             if (now - lastSuspiciousCallRef.current > WARNING_COOLDOWN_MS) {
               lastSuspiciousCallRef.current = now;
               countersRef.current = { away: 0, noFace: 0, multiFace: 0 };

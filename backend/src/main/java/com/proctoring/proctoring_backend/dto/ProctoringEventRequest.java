@@ -8,10 +8,11 @@ public class ProctoringEventRequest {
     private String examId;
     private String candidateId;
     private String candidateName;
-    private String eventType; // CLIPBOARD_PASTE_ATTEMPT, TAB_SWITCH, FULLSCREEN_EXIT, etc.
+    private String eventType; // CLIPBOARD_PASTE_ATTEMPT, TAB_SWITCH, FULLSCREEN_EXIT, MULTIPLE_FACES, etc.
     private String severity;
     private String details;
     private String metadata;
+    private String snapshot; // Captured camera snapshot for evidence
     private LocalDateTime timestamp;
 
     public ProctoringEventRequest() {}
@@ -48,6 +49,9 @@ public class ProctoringEventRequest {
 
     public String getMetadata() { return metadata; }
     public void setMetadata(String metadata) { this.metadata = metadata; }
+
+    public String getSnapshot() { return snapshot; }
+    public void setSnapshot(String snapshot) { this.snapshot = snapshot; }
 
     public LocalDateTime getTimestamp() { return timestamp; }
     public void setTimestamp(LocalDateTime timestamp) { this.timestamp = timestamp; }

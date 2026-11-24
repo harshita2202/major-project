@@ -833,3 +833,56 @@ export async function loginUser(credentials) {
   }
   return data;
 }
+
+/**
+ * Student-Wise Proctoring Events API: GET /api/students/:id/events
+ * Returns chronologically ordered security events and camera evidence snapshots for a student.
+ */
+export async function getStudentEvents(studentId) {
+  if (!studentId) return [];
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/students/${encodeURIComponent(studentId)}/events`);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) return data;
+    }
+  } catch (err) {
+    console.warn('Student events API notice:', err);
+  }
+
+  // Fallback to local recorded violations for this student
+  const localList = getLocalViolations();
+  return localList
+    .filter((v) => (v.studentId === studentId || v.candidateId === studentId || v.student === studentId))
+    .map((v) => ({
+      id: v.id,
+      candidateId: v.candidateId || studentId,
+      candidateName: v.candidateName || v.student,
+      eventType: v.type || v.violation,
+      severity: v.severity,
+      details: v.details,
+      timestamp: v.timestamp || v.time,
+      snapshot: v.snapshot || null,
+      pointsAdded: v.pointsAdded || 0,
+      updatedRiskScore: v.updatedRiskScore || 0
+    }));
+}
+
+/**
+ * Student-Wise Violations API: GET /api/violations/candidate/:id
+ */
+export async function getStudentViolations(studentId) {
+  if (!studentId) return [];
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/violations/candidate/${encodeURIComponent(studentId)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) return data.map(normalizeViolation);
+    }
+  } catch (err) {
+    console.warn('Student violations API notice:', err);
+  }
+
+  const all = await getAllViolations();
+  return all.filter((v) => v.candidateId === studentId || v.studentId === studentId);
+}

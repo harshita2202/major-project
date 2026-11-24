@@ -14,6 +14,7 @@ public class ProctoringEventResponse {
     private String severity;
     private String details;
     private String metadata;
+    private String snapshot; // Captured camera frame (base64 image)
     private LocalDateTime timestamp;
 
     // Risk Scoring & Warning fields
@@ -47,6 +48,7 @@ public class ProctoringEventResponse {
         resp.setSeverity(event.getSeverity());
         resp.setDetails(event.getDetails());
         resp.setMetadata(event.getMetadata());
+        resp.setSnapshot(event.getSnapshot());
         resp.setTimestamp(event.getTimestamp());
         resp.setPointsAdded(event.getPointsAdded());
         resp.setUpdatedRiskScore(event.getUpdatedRiskScore());
@@ -82,6 +84,9 @@ public class ProctoringEventResponse {
 
     public String getMetadata() { return metadata; }
     public void setMetadata(String metadata) { this.metadata = metadata; }
+
+    public String getSnapshot() { return snapshot; }
+    public void setSnapshot(String snapshot) { this.snapshot = snapshot; }
 
     public LocalDateTime getTimestamp() { return timestamp; }
     public void setTimestamp(LocalDateTime timestamp) { this.timestamp = timestamp; }

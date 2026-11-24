@@ -21,7 +21,7 @@ public class ProctoringEventController {
 
     /**
      * General endpoint to record any proctoring event.
-     * Especially: CLIPBOARD_PASTE_ATTEMPT, TAB_SWITCH, FULLSCREEN_EXIT
+     * Especially: CLIPBOARD_PASTE_ATTEMPT, TAB_SWITCH, FULLSCREEN_EXIT, MULTIPLE_FACES
      */
     @PostMapping("/events")
     public ResponseEntity<ProctoringEventResponse> recordEvent(@RequestBody ProctoringEventRequest request) {
@@ -58,5 +58,21 @@ public class ProctoringEventController {
     @GetMapping("/exams/{examId}/events-list")
     public List<ProctoringEventResponse> getEventsByExam(@PathVariable String examId) {
         return proctoringEventService.getEventsByExamId(examId);
+    }
+
+    /**
+     * Retrieve all proctoring events for a candidate (student-wise logs with evidence snapshots).
+     */
+    @GetMapping("/candidates/{candidateId}/events")
+    public List<ProctoringEventResponse> getEventsByCandidate(@PathVariable String candidateId) {
+        return proctoringEventService.getEventsByCandidateId(candidateId);
+    }
+
+    /**
+     * Alias endpoint for students directory logs: GET /api/students/{studentId}/events
+     */
+    @GetMapping("/students/{studentId}/events")
+    public List<ProctoringEventResponse> getEventsByStudent(@PathVariable String studentId) {
+        return proctoringEventService.getEventsByCandidateId(studentId);
     }
 }

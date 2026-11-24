@@ -36,6 +36,14 @@ public class ViolationController {
                 .toList();
     }
 
+    @GetMapping("/candidate/{candidateId}")
+    public List<Violation> getViolationsByCandidate(@PathVariable String candidateId) {
+        return violationRepository.findByCandidateIdOrderByIdDesc(candidateId).stream()
+                .filter(v -> (v.getCandidateId() == null || !v.getCandidateId().startsWith("cand-"))
+                        && (v.getId() == null || (!v.getId().equals("VIO-101") && !v.getId().equals("VIO-102") && !v.getId().equals("VIO-103"))))
+                .toList();
+    }
+
     @PostMapping
     public Violation createViolation(@RequestBody Violation violation) {
         if (violation.getId() == null || violation.getId().isEmpty()) {

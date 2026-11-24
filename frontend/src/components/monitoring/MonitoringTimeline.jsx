@@ -1,6 +1,6 @@
-import { CheckCircle2, AlertTriangle, AlertOctagon, Info } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, AlertOctagon, Info, Camera } from 'lucide-react';
 
-export default function MonitoringTimeline({ events = [] }) {
+export default function MonitoringTimeline({ events = [], onSnapshotClick }) {
   if (!events || events.length === 0) {
     return (
       <div style={{ padding: '24px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>
@@ -32,7 +32,7 @@ export default function MonitoringTimeline({ events = [] }) {
           top: '6px',
           bottom: '6px',
           width: '2px',
-          backgroundColor: '#e2e8f0'
+          backgroundColor: '#e2e8f0',
         }}
       />
 
@@ -44,7 +44,7 @@ export default function MonitoringTimeline({ events = [] }) {
             marginBottom: idx < events.length - 1 ? '16px' : 0,
             display: 'flex',
             flexDirection: 'column',
-            gap: '2px'
+            gap: '2px',
           }}
         >
           {/* Node Icon */}
@@ -59,7 +59,7 @@ export default function MonitoringTimeline({ events = [] }) {
               borderRadius: '50%',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
             }}
           >
             {getIcon(ev.type)}
@@ -67,12 +67,46 @@ export default function MonitoringTimeline({ events = [] }) {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '11.5px', color: '#94a3b8', fontFamily: 'var(--font-mono)' }}>
-              {ev.time}
+              {ev.time || ev.timestamp}
             </span>
+            {ev.pointsAdded ? (
+              <span style={{ fontSize: '10px', fontWeight: 700, color: '#dc2626' }}>
+                (+{ev.pointsAdded} pts)
+              </span>
+            ) : null}
           </div>
+
           <div style={{ fontSize: '13px', color: '#1e293b', fontWeight: 500 }}>
-            {ev.event}
+            {ev.event || ev.details || ev.eventType}
           </div>
+
+          {/* Evidence Snapshot Preview Button */}
+          {ev.snapshot && onSnapshotClick && (
+            <button
+              type="button"
+              onClick={() => onSnapshotClick(ev)}
+              style={{
+                marginTop: '4px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '3px 8px',
+                borderRadius: '5px',
+                border: '1px solid #fca5a5',
+                backgroundColor: '#fef2f2',
+                color: '#b91c1c',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                width: 'fit-content',
+                transition: 'background-color 0.15s ease',
+              }}
+              title="Inspect multiple faces evidence photo"
+            >
+              <Camera size={12} color="#dc2626" />
+              <span>📸 View Multiple Faces Photo</span>
+            </button>
+          )}
         </div>
       ))}
     </div>

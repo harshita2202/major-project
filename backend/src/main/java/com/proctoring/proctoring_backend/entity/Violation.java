@@ -24,6 +24,9 @@ public class Violation {
     @Column(length = 2000)
     private String details;
 
+    @Column(name = "snapshot", columnDefinition = "TEXT")
+    private String snapshot; // Base64 encoded camera snapshot for evidence
+
     public Violation() {}
 
     public Violation(String id, String candidateId, String candidateName, String candidateAvatar,
@@ -118,5 +121,13 @@ public class Violation {
 
     public void setDetails(String details) {
         this.details = details;
+    }
+
+    public String getSnapshot() {
+        return snapshot;
+    }
+
+    public void setSnapshot(String snapshot) {
+        this.snapshot = snapshot;
     }
 }

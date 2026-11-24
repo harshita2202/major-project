@@ -4,6 +4,7 @@ import StatCard from '../components/dashboard/StatCard';
 import RecentMalpracticesGraph from '../components/dashboard/RecentMalpracticesGraph';
 import MalpracticeBreakdown from '../components/dashboard/MalpracticeBreakdown';
 import ActiveExamsCard from '../components/dashboard/ActiveExamsCard';
+import StudentWiseLogsCard from '../components/dashboard/StudentWiseLogsCard';
 import QuickActions from '../components/dashboard/QuickActions';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import {
@@ -22,7 +23,8 @@ import {
  * 2. 4 Simplified KPI Cards: [Active Exams] [Active Students] [Total Malpractices] [Completed Exams]
  * 3. [ Recent Malpractices — Graph ] (Incidents over time with line/bar toggle and summary metrics)
  * 4. Split section: [ Malpractice Breakdown ] and [ Active Exams ]
- * 5. [ Quick Actions ] (Direct access to Live Invigilation, Scheduling, Logs, Reports)
+ * 5. [ Student-Wise Logs & Evidence ] (Student logs with multiple-faces screenshot previews)
+ * 6. [ Quick Actions ] (Direct access to Live Invigilation, Scheduling, Logs, Reports)
  */
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
@@ -126,71 +128,53 @@ export default function Dashboard() {
           >
             Examination Dashboard
           </h2>
+          <p style={{ fontSize: '13px', color: '#64748b', margin: '4px 0 0 0' }}>
+            Real-time university invigilation overview, threat intelligence, and proctoring telemetry.
+          </p>
         </div>
 
-        {/* Sync & Live Status Controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              fontSize: '12px',
-              color: '#475569',
-              padding: '6px 12px',
-              backgroundColor: '#ffffff',
-              border: '1px solid #e2e8f0',
-              borderRadius: '8px',
-            }}
-          >
+          {lastSyncTime && (
             <span
               style={{
-                width: '7px',
-                height: '7px',
-                borderRadius: '50%',
-                backgroundColor: '#10b981',
-                boxShadow: '0 0 0 2px rgba(16, 185, 129, 0.2)',
+                fontSize: '12px',
+                color: '#64748b',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
               }}
-            />
-            <span style={{ fontWeight: 600 }}>Live Telemetry</span>
-            {lastSyncTime && (
-              <span style={{ color: '#94a3b8', fontSize: '11px', marginLeft: '4px' }}>
-                • {lastSyncTime}
-              </span>
-            )}
-          </div>
+            >
+              <span
+                style={{
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  backgroundColor: '#10b981',
+                  display: 'inline-block',
+                }}
+              />
+              Synced at {lastSyncTime}
+            </span>
+          )}
 
           <button
             type="button"
             className="btn btn-secondary btn-sm"
             onClick={handleRefresh}
             disabled={isRefreshing}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '7px 14px',
-              borderRadius: '8px',
-              fontWeight: 600,
-              fontSize: '12.5px',
-              backgroundColor: '#ffffff',
-              border: '1px solid #cbd5e1',
-              color: '#0f172a',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
           >
-            <RefreshCw size={13} className={isRefreshing ? 'spin' : ''} />
-            <span>{isRefreshing ? 'Syncing...' : 'Sync Data'}</span>
+            <RefreshCw size={13} className={isRefreshing ? 'animate-spin' : ''} />
+            <span>{isRefreshing ? 'Refreshing...' : 'Sync Telemetry'}</span>
           </button>
         </div>
       </div>
 
-      {/* 2. Simplified KPI Cards */}
+      {/* 2. Simplified 4 KPI Cards */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
           gap: '16px',
         }}
       >
@@ -198,18 +182,18 @@ export default function Dashboard() {
           title="Active Exams"
           value={activeExamsCount}
           icon={BookOpen}
-          accentColor="#1e40af"
-          iconBg="#eff6ff"
-          subtext="In-session assessments"
+          accentColor="#0f2b48"
+          iconBg="#f0f7ff"
+          subtext="Scheduled & live sessions"
         />
 
         <StatCard
           title="Active Students"
           value={activeStudentsCount}
           icon={Users}
-          accentColor="#0284c7"
-          iconBg="#f0f9ff"
-          subtext="Currently taking exams"
+          accentColor="#2563eb"
+          iconBg="#eff6ff"
+          subtext="Candidates currently taking tests"
         />
 
         <StatCard
@@ -248,7 +232,12 @@ export default function Dashboard() {
         <ActiveExamsCard exams={exams} />
       </div>
 
-      {/* 5. [ Quick Actions ] */}
+      {/* 5. [ Student-Wise Logs & Evidence ] */}
+      <div>
+        <StudentWiseLogsCard violations={violations} candidates={candidates} />
+      </div>
+
+      {/* 6. [ Quick Actions ] */}
       <div style={{ marginTop: '4px' }}>
         <QuickActions />
       </div>
