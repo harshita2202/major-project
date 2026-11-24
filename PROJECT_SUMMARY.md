@@ -1,15 +1,15 @@
 # Project Summary: Proctortrack Online Examination & AI Proctoring Platform
 
 > **Location:** Root directory (`/Major/PROJECT_SUMMARY.md`)  
-> **Status:** Full-Stack Integrated & Live (Frontend + Backend + PostgreSQL + WebSocket STOMP + Gaze Detection ML Service)  
-> **Last Updated:** October 2026  
+> **Status:** Full-Stack Integrated & Live (Frontend + Backend + PostgreSQL + WebSocket STOMP + Gaze Detection + VoiceGuard Audio + Dual-Camera WebRTC)  
+> **Last Updated:** November 2026  
 
 ---
 
 ## 📌 Executive Overview
 **Proctortrack** is an enterprise-grade, full-stack online examination and automated AI proctoring platform engineered with a strict dual-role workflow:
-1. **Students:** An anti-cheating, lockdown assessment environment supporting both Multiple-Choice Questions (MCQ) and interactive coding sandboxes, complete with automated scoring, persistent sessions, network interruption grace recovery, real-time gaze tracking, and multi-tier malpractice safeguards.
-2. **Invigilators / Admins:** A centralized live monitoring command center featuring real-time telemetry KPI cards, interactive malpractice trend graphs, categorized violation breakdowns, active exam tracking, on-demand camera feeds, automated infraction detection, and WebSocket-driven risk updates.
+1. **Students:** An anti-cheating, lockdown assessment environment supporting both Multiple-Choice Questions (MCQ) and interactive coding sandboxes, complete with automated scoring, persistent sessions, network interruption grace recovery, real-time gaze tracking, dual-camera mobile monitoring, multi-speaker voice detection, and multi-tier malpractice safeguards.
+2. **Invigilators / Admins:** A centralized live monitoring command center featuring real-time telemetry KPI cards, interactive malpractice trend graphs, categorized violation breakdowns, active exam tracking, on-demand dual-camera feeds, automated audio & visual infraction detection, and WebSocket-driven risk updates.
 
 ---
 
@@ -17,10 +17,12 @@
 
 | Layer | Technologies & Tools |
 | :--- | :--- |
-| **Frontend** | React 19, Vite 8, Lucide React, WebSocket / SockJS STOMP Client, Pure CSS Design System (Custom Glassmorphism, Dark/Light Mode Tokens) |
-| **Backend** | Java 25 / 21, Spring Boot 4.1.1, Spring Data JPA, Hibernate ORM 7.4.5, Spring WebSocket & STOMP Message Broker, HikariCP Connection Pooling, Maven |
+| **Frontend** | React 19, Vite 8, Lucide React, WebSocket / SockJS STOMP Client, WebRTC P2P, Pure CSS Design System (Custom Glassmorphism, Dark/Light Mode Tokens) |
+| **Backend** | Java 25 / 21, Spring Boot 4.1.1, Spring Data JPA, Hibernate ORM 7.4.5, Spring WebSocket & STOMP Message Broker (10MB/20MB Buffers), HikariCP Connection Pooling, Maven |
 | **Database** | PostgreSQL 18+ (`proctoring_db`) with Hibernate schema validation & migration |
 | **AI / Gaze Estimation** | Python 3.11, FastAPI, Uvicorn, MediaPipe Face Landmarker (478 iris & facial mesh landmarks), PyTorch, Torchvision, L2CS-Net ResNet-50 Gaze360 (`safetensors`), OpenCV, Scikit-learn |
+| **AI / Voice & Audio** | Python 3.11, FastAPI, Uvicorn, Silero VAD (Voice Activity Detection), SpeechBrain ECAPA-TDNN (`spkrec-ecapa-voxceleb` speaker embeddings), Web Audio API Normalized Autocorrelation ($F_0$ Pitch Tracking) |
+| **Dual-Camera System** | WebRTC Peer-to-Peer, STOMP Signaling, WebSocket Base64 JPEG Fallback (8 FPS), Screen Wake Lock API, Offline QR Code Generation |
 | **Security & Proctoring** | Fullscreen API, Page Visibility API, Network Offline/Online API, Clipboard lockdown, AI/ML risk scoring engine (0–100 scale) with real-time escalation |
 | **Configuration** | Centralized `.env` and `.env.example` supporting custom ports, resilient pool settings, and dynamic API endpoints |
 
@@ -28,158 +30,101 @@
 
 ## 🌐 Running Services & Port Mappings
 
-| Service | Host & Port | Status | Protocol / Framework |
-| :--- | :--- | :--- | :--- |
-| **Frontend Web App** | `http://localhost:5173` | 🟢 Active | React 19 + Vite 8 SPA |
-| **Backend Core API** | `http://localhost:8080` | 🟢 Active | Spring Boot 4.1.1 (Java 25) |
-| **Gaze Detection Microservice** | `http://localhost:5001` | 🟢 Active | FastAPI + Uvicorn (L2CS-Net + MediaPipe) |
-| **Database** | `localhost:5432` | 🟢 Active | PostgreSQL (`proctoring_db`) |
+| Service | Host & Port | Status | Protocol / Framework | Purpose |
+| :--- | :--- | :--- | :--- | :--- |
+| **Frontend Web App** | `https://localhost:5173` | 🟢 Active | React 19 + Vite 8 SPA (HTTPS / SSL) | Candidate Exam Portal & Invigilator Dashboard |
+| **Backend Core API** | `http://localhost:8080` | 🟢 Active | Spring Boot 4.1.1 (Java 25) | REST Endpoints, Database JPA, STOMP Broker |
+| **Gaze Detection Microservice** | `http://localhost:5001` | 🟢 Active | FastAPI + Uvicorn (Port 5001) | L2CS-Net Gaze Estimation & Head Pose |
+| **VoiceGuard Microservice** | `http://localhost:8000` | 🟢 Active | FastAPI + Uvicorn (Port 8000) | Silero VAD + ECAPA-TDNN Speaker Verification |
+| **Database Server** | `localhost:5432` | 🟢 Active | PostgreSQL 18 (`proctoring_db`) | Relational Data, Submissions, Violations |
 
 ---
 
-## 🚀 Key Features & Architectural Capabilities
+## 🌟 Major System Enhancements (Implemented Post-Gaze Detection)
 
-### 1. Real-Time Gaze Detection & Computer Vision Pipeline (`gaze_detection/`)
-- **FastAPI ML Microservice ([`server.py`](file:///c:/Major/gaze_detection/server.py))**:
-  - Independent Python 3.11 microservice running on port `5001` exposing `/health` and `/analyze` endpoints.
-  - Implements CORS middleware allowing cross-origin webcam frame ingestion from the Vite client.
-- **Dual-Model Gaze & Face Estimation Pipeline**:
-  - **MediaPipe Face Landmarker ([`landmarks.py`](file:///c:/Major/gaze_detection/landmarks.py) & `face_landmarker.task`)**: High-accuracy landmark detection extracting 478 points, including eye contours and dual iris centers.
-  - **L2CS-Net Deep Learning Gaze Estimator ([`gaze_model.py`](file:///c:/Major/gaze_detection/gaze_model.py))**: Pretrained ResNet-50 backbone with Gaze360 weights loaded via `safetensors` (`l2cs_gaze360_resnet50.safetensors`, 95.7 MB). Classifies gaze angles across 90 bins covering pitch and yaw in continuous radians.
-  - **Geometric Fallback ([`eye_crop.py`](file:///c:/Major/gaze_detection/eye_crop.py))**: Automatic fallback estimator based on iris center offset if GPU/neural weights are unavailable.
-  - **Head Pose Estimation ([`head_pose.py`](file:///c:/Major/gaze_detection/head_pose.py))**: Evaluates yaw, pitch, and roll via `cv2.solvePnP` to detect head rotation and looking away from screen.
-- **Malpractice Detection & Suspicion Logic**:
-  - Evaluates consecutive off-center gaze frames and head deviations (e.g., yaw > 30° or pitch > 25°).
-  - Flags `is_suspicious = true` with dynamic suspicion score (0.0 to 1.0) and descriptive warnings (*"Suspicious: Head turned away"*, *"Suspicious: Looking away"*).
-- **Frontend Camera Feed Integration ([`CameraPreview.jsx`](file:///c:/Major/frontend/src/components/exam/CameraPreview.jsx) & [`gazeAnalysis.js`](file:///c:/Major/frontend/src/services/gazeAnalysis.js))**:
-  - Web camera feed dynamically samples frames and dispatches base64 payloads to `http://localhost:5001/analyze`.
-  - Gracefully falls back to standby if camera permissions are denied or service is offline.
-  - Fixed duplicate line syntax issue in `gazeAnalysis.js` to ensure clean build output.
+The following comprehensive features and architectural upgrades were engineered, verified, and integrated following the initial gaze detection pipeline:
 
----
-
-### 2. Calibrated Risk Scoring & Malpractice Penalty Engine
-- **Proportional Event Penalties ([`RiskScoringService.java`](file:///c:/Major/backend/src/main/java/com/proctoring/proctoring_backend/service/RiskScoringService.java))**:
-  - Fine-tuned risk penalty distribution to balance deterrence without unwarranted rapid disqualification:
-    | Malpractice / Telemetry Event | Points | Severity Classification |
-    | :--- | :---: | :--- |
-    | `NETWORK_INTERRUPTION` / `NETWORK_DISCONNECTION` | **+3** | Low (Grace period protected) |
-    | `LONG_INACTIVITY` / `INACTIVITY` | **+5** | Low |
-    | `SHORTCUT_ATTEMPT` / `KEYBOARD_SHORTCUT` | **+5** | Medium (Blocked action) |
-    | `GAZE_WARNING` / `GAZE` | **+8** | Medium (Gaze / head deviation) |
-    | `FULLSCREEN_EXIT` | **+10** | High (Window containment break) |
-    | `TAB_SWITCH` | **+15** | High (Loss of exam focus) |
-    | `COPY_ATTEMPT` / `CUT_ATTEMPT` | **+20** | High (Direct integrity violation) |
-    | `PASTE_ATTEMPT` / `CLIPBOARD_PASTE_ATTEMPT` | **+20** | High (Direct integrity violation) |
-- **Cumulative Risk Tiers**:
-  - **Low Risk (0–49 pts)**: Standard monitoring status.
-  - **Medium Risk (50–79 pts)**: Triggers prominent on-screen warning modals in student portal.
-  - **High Risk (80+ pts)**: Automatic exam termination and candidate disqualification with reason `CHEATING_RISK_THRESHOLD_REACHED`.
+### A. Dual-Camera Proctoring System (Laptop Webcam + Mobile Phone)
+1. **Dynamic Session-Specific Mobile Pairing**:
+   - Backend pairing token generation (`POST /api/mobile-pairing/generate` and `MobilePairingToken` entity) with cryptographically secure session tokens and automatic expiry.
+   - Standalone, zero-install mobile web application served at `/mobile-camera?token=...`, specifically optimized for smartphone displays and touch interaction.
+   - Offline QR Code generation (`qrcode` library) rendered directly in the candidate interface without external third-party network dependencies.
+2. **Dual-Transport Video Pipeline (WebRTC P2P + WebSocket Frame Fallback)**:
+   - **Primary WebRTC P2P Channel**: Employs Spring Boot STOMP signaling (`/app/webrtc/{sessionId}/*` and `/topic/webrtc/{sessionId}/*`) to establish direct peer-to-peer video streaming.
+   - **Guaranteed WebSocket Fallback Channel**: On restricted cellular networks, mobile hotspots, or firewalled NATs where public STUN fails, the mobile phone continuously streams canvas-compressed JPEG frames (~8 FPS, 320x240, quality 0.40) over `/app/webrtc/{sessionId}/frame`.
+   - **Zero-Blackout Layered Display**: The candidate panel (`MobileCameraPanel.jsx`) and proctor modal (`MobileCameraFeed.jsx`) layer the fallback image on `zIndex: 2` beneath the WebRTC video on `zIndex: 3`, ensuring unbroken video feed under all network conditions.
+   - Expanded backend WebSocket message limits to **10MB** and transport send buffers to **20MB** in `WebSocketConfig.java` to prevent socket throttling under high-throughput video streaming.
+3. **iOS Safari & Mobile Hardware Stability Fixes**:
+   - **Eliminated WebRTC Renegotiation Loops**: Removed `fallbackFrame` from the WebRTC `useEffect` dependency array, stopping the laptop from destroying and recreating WebRTC peer connections 10 times a second.
+   - **Eliminated React Re-Render Storm**: Replaced `frameCount` component state with mutable `framesSentRef`, preventing high-frequency React re-renders from starving the mobile device's CPU.
+   - **Prevented AVFoundation Hardware Shutdown**: iOS Safari's media engine terminates the camera track if video transceivers churn rapidly. Enforced a single WebRTC initialization per session and cleanly initialized DOM attributes (`playsinline`, `webkit-playsinline`, `muted`, `defaultMuted`) before calling `.play()`.
+   - **Screen Wake Lock API**: Incorporated `navigator.wakeLock.request('screen')` so the phone screen never dims or locks during the examination.
+   - **Mobile UI Status Bar**: Added live status indicators displaying pulsing green `LIVE STREAMING` badges and camera flip controls.
 
 ---
 
-### 3. Network Interruption & Offline Resilience Architecture
-- **Grace Period Protection ([`NetworkInterruptionBanner.jsx`](file:///c:/Major/frontend/src/components/exam/NetworkInterruptionBanner.jsx) & [`StudentExam.jsx`](file:///c:/Major/frontend/src/pages/StudentExam.jsx))**:
-  - Implemented an intelligent **10-second countdown grace period** upon browser network disconnect (`window.onoffline`), preventing unfair immediate penalties for transient WiFi drops or router handshakes.
-  - While offline within the grace period, an amber sticky banner alerts the student with live second-by-second countdowns and instructions to restore connectivity.
-- **Rule-Based Penalty Allocation**:
-  - If network disconnection persists beyond 10 seconds, `triggerNetworkInterruptionViolation()` records a `NETWORK_INTERRUPTION` penalty (+3 risk points).
-  - The status badge transitions from amber grace to red: `"Offline · Penalty Recorded"`.
-- **Deferred Event Sync & Auto-Recovery**:
-  - When connection is restored (`window.ononline`), the timer clears, and a dismissible green toast confirms: *"Network connection restored. You may continue the exam."*
-  - Any pending offline infraction telemetry unable to dispatch while disconnected is buffered locally and automatically flushed to the backend via `recordExamEvent()`.
-- **Real-Time WebSocket Ingestion ([`ProctoringEventService.java`](file:///c:/Major/backend/src/main/java/com/proctoring/proctoring_backend/service/ProctoringEventService.java))**:
-  - Network interruption events are stored in PostgreSQL (`proctoring_events` and `violations` tables) and broadcasted in real-time over `/topic/examiner/risk-updates` and `/topic/events` to proctors.
-- **Developer / Evaluator Testing Utilities**:
-  - Window helpers (`window.__simulateOffline` and `window.__simulateOnline`) and Vite DEV mode inline simulation buttons enable instant offline/online testing without unplugging physical network adapters.
+### B. VoiceGuard & Real-Time Multi-Voice Detection Engine
+1. **VoiceGuard Deep Learning Microservice (`voice detection/`, Port 8000)**:
+   - Built on FastAPI with **Silero VAD** for voice activity detection and **SpeechBrain ECAPA-TDNN** (`spkrec-ecapa-voxceleb`) for 192-dimensional speaker embeddings.
+   - Exposes REST endpoints (`/enroll`, `/health`, `/config/client`, `/events/{id}`) and WebSocket streaming (`/ws/monitor`).
+   - Evaluates candidate voice profile embeddings against streaming chunks, identifying foreign speaker intrusion via cosine distance thresholding.
+2. **In-Browser Edge Multi-Voice Detection Engine ([`voiceAnalysis.js`](file:///c:/Major/frontend/src/services/voiceAnalysis.js))**:
+   - **Normalized Time-Domain Autocorrelation ($R(\tau)/R(0)$)**: Replaced flawed FFT magnitude peak picking with normalized time-domain autocorrelation across candidate pitch lags (80 Hz to 350 Hz). Accurately isolates fundamental vocal pitch ($F_0$) without interference from louder vowel formants ($F_1/F_2$ at 600–1800 Hz).
+   - **Polyphonic Dual-Pitch Overlap Detection**: Detects simultaneous secondary correlation peaks ($>0.35$ confidence) with pitch deltas $>38$ Hz (excluding octave harmonics), catching two people talking at the same time.
+   - **Conversational Pitch Dispersion Tracking**: Computes standard deviation and pitch span over a sliding window. Normal single-speaker pitch variance is $<18$ Hz; conversational turn-taking results in std dev $>26$ Hz and pitch span $>50$ Hz, triggering strikes.
+   - **Microphone Lifecycle Synchronization**: Unified media stream requests in [`CameraPreview.jsx`](file:///c:/Major/frontend/src/components/exam/CameraPreview.jsx) to acquire both video and audio in a single prompt, triggering `VoiceMonitor` through reactive `hasAudioTrack` state.
+   - **Dynamic Equalizer Meter**: Calibrated dBFS volume mapping (-55 to -10 dBFS) powering the 4-bar equalizer on the candidate card, displaying `Quiet`, `Voice Normal` (green), and `Multiple Voices` (red).
+3. **Security Policy & Risk Penalties**:
+   - Added `MULTIPLE_VOICES`, `VOICE_WARNING`, `AUDIO_WARNING`, and `SILENT_MIC` events to backend `RiskScoringService.java` (+15 points penalty) and `ProctoringEventService.java` (`high` severity).
+   - Integrated live audio violation badges on the proctor dashboard (`LiveMonitoring.jsx`).
 
 ---
 
-### 4. Invigilator & Admin Command Center
-- **Interactive Analytics & Malpractice Visualizations ([`Dashboard.jsx`](file:///c:/Major/frontend/src/pages/Dashboard.jsx))**:
-  - **Malpractice Breakdown Card ([`MalpracticeBreakdown.jsx`](file:///c:/Major/frontend/src/components/dashboard/MalpracticeBreakdown.jsx))**: Categorized distribution of violations across Tab Switching, Fullscreen Exits, Clipboard Misuse, Network Drops, and Gaze Deviations.
-  - **Recent Malpractices Trend Graph ([`RecentMalpracticesGraph.jsx`](file:///c:/Major/frontend/src/components/dashboard/RecentMalpracticesGraph.jsx))**: Hourly/daily chronological violation distribution graph visualizing security incident surges over time.
-  - **Active Exams Live Card ([`ActiveExamsCard.jsx`](file:///c:/Major/frontend/src/components/dashboard/ActiveExamsCard.jsx))**: Displays currently running assessments, active candidate headcounts, countdown timers, and direct jump buttons to live invigilation.
-  - **Quick Actions Bar ([`QuickActions.jsx`](file:///c:/Major/frontend/src/components/dashboard/QuickActions.jsx))**: One-click actions for invigilators to schedule examinations, launch live camera monitors, review audit logs, and trigger system health cleanups.
-  - **Recent Violations Feed ([`RecentViolations.jsx`](file:///c:/Major/frontend/src/components/dashboard/RecentViolations.jsx))**: Real-time event log featuring student avatars, severity badges (`High`, `Medium`, `Low`), exact timestamps, and modal review triggers.
+### C. Client-Side Browser Fallbacks & CV Enhancements
+1. **In-Browser MediaPipe Face Mesh Fallback**:
+   - When the Python gaze microservice (port 5001) is offline or unreachable, [`CameraPreview.jsx`](file:///c:/Major/frontend/src/components/exam/CameraPreview.jsx) automatically falls back to client-side MediaPipe landmark estimation.
+   - Extracts 478 face and iris landmarks in real time inside the browser, calculating head pitch, yaw, roll, and eye deviation with zero backend dependency.
+2. **Calibrated Bezel Camera Geometry**:
+   - Calibrated vertical pitch angle normalization for standard laptop screen bezel camera placements (valid forward gaze between -18° and +8°), eliminating false positives from natural screen reading angles.
+3. **Inactivity & Multiple Face Enforcement**:
+   - `MULTIPLE_FACES` flags immediate high-risk infractions if a secondary person appears in the camera frame.
+   - `LONG_INACTIVITY` triggers after extended absence of candidate interaction, warning the student and notifying proctors.
 
 ---
 
-### 5. Dynamic Exam Scoring & Real-Time Auto-Termination
-- **Automated Score Evaluation ([`StudentExam.jsx`](file:///c:/Major/frontend/src/pages/StudentExam.jsx))**:
-  - Implemented `calculateExamScore()` to dynamically evaluate student submissions across both MCQs (comparing answers against `correctIndex`) and coding challenges.
-  - Eliminated hardcoded `score: 0` submissions; the submission screen provides an instant, accurate scorecard displaying percentage, answered count, and performance breakdown.
-- **Strict Multi-Tier Violation Enforcement**:
-  - **Tab Switching**: Immediate warning modals on tab switches or browser blur; auto-terminates upon reaching the threshold (**3 infractions**).
-  - **Fullscreen Exits**: Fullscreen enforcement catches Esc / Alt-Tab exits; triggers auto-disqualification upon **3 infractions**.
-  - **Cumulative ML Risk Scoring**: Real-time telemetry evaluates events via backend `RiskScoringService`. Exceeding the high-risk threshold (**&ge; 80 points**) immediately auto-terminates the examination.
-- **Persistent Audit Logging**:
-  - Endpoints update the student's status to `submitted`, `time_expired`, or `terminated` / `disqualified`, persisting records across `ExamSubmissionRepository` and `CandidateRepository`.
+### D. End-to-End Lockdown, Scoring & Live Invigilation Upgrades
+1. **Automated Exam Scoring Engine**:
+   - Implemented `calculateExamScore()` in `StudentExam.jsx` to dynamically evaluate submissions across MCQs (against `correctIndex`) and coding problems, displaying instant percentage scorecards and performance analytics upon submission.
+2. **Strict Multi-Tier Violation Enforcement**:
+   - **Tab Switching**: Auto-terminates upon reaching 3 recorded infractions.
+   - **Fullscreen Exits**: Fullscreen lock enforcement catches Escape/Alt-Tab attempts; auto-disqualifies upon 3 infractions.
+   - **Cumulative Risk Score Auto-Submit**: Reaching $\ge 80$ risk points triggers immediate auto-termination with reason `CHEATING_RISK_THRESHOLD_REACHED`.
+3. **Live Invigilation Dynamic Attempt Lifecycle**:
+   - Replaced static demo seeds with dynamic attempt endpoints: `POST /api/candidates/start-attempt`, `POST /api/candidates/update-progress`, and `POST /api/candidates/end-attempt`.
+   - `GET /api/candidates/live` filters strictly for currently active students, keeping the invigilator dashboard uncluttered.
+4. **On-Demand Camera Monitoring**:
+   - Optimized bandwidth by replacing perpetual video streams for all students with on-demand video feeds and modal inspection (`CandidateDetailModal.jsx`).
 
 ---
 
-### 6. Live Invigilation: Real-Time Active Attempt Tracking
-- **Complete Removal of Hardcoded Dummy Candidates**:
-  - Purged static demo seeds (`cand-1`, `cand-2`, etc.) from `DatabaseSeeder.java` and `mockData.js`.
-  - Added an automatic database cleanup mechanism on startup to eliminate stale dummy entries.
-- **Dynamic Attempt Lifecycle ([`StudentExam.jsx`](file:///c:/Major/frontend/src/pages/StudentExam.jsx) & [`CandidateController.java`](file:///c:/Major/backend/src/main/java/com/proctoring/proctoring_backend/controller/CandidateController.java))**:
-  - **Exam Start**: When a student clicks *"Start Examination"* or enters an active exam, `startExamAttempt()` dispatches `POST /api/candidates/start-attempt` with real candidate credentials and exam metadata.
-  - **Progress Sync**: An active background sync effect periodically streams answered counts, completion percentages, and countdown timers to the backend via `POST /api/candidates/update-progress`.
-  - **Exam Completion / Disqualification**: Submitting or being disqualified triggers `endExamAttempt()`, updating candidate status to `completed` or `disqualified`.
-- **Live Filtering**:
-  - `GET /api/candidates/live` returns **only** candidates with `status = "active"`, automatically filtering out finished students and dummy IDs.
-  - When no students are taking exams, the Live Invigilation page displays a clean empty state: *"No Students Currently Attempting Exams."*
-- **Real-Time Polling & Reactivity ([`LiveMonitoring.jsx`](file:///c:/Major/frontend/src/pages/LiveMonitoring.jsx))**:
-  - Equipped with background polling (every 3 seconds), window focus listeners, and cross-tab storage synchronizers so newly attempting students appear immediately without requiring manual page reloads.
+### E. Infrastructure, Buffer Expansion & Network Resilience
+1. **Network Interruption Grace Period**:
+   - Implemented an intelligent **10-second countdown grace period** upon browser disconnection (`window.onoffline`).
+   - If connectivity restores within 10 seconds, penalties are waived and telemetry flushes automatically. Disconnections exceeding 10 seconds record a `NETWORK_INTERRUPTION` penalty (+3 points).
+2. **Database Connection Resilience (HikariCP)**:
+   - Configured robust connection pooling parameters in `application.properties` (`max-lifetime=1800000`, `keepalive-time=30000`, `connection-timeout=20000`), preventing stale connection drops when host machines sleep or switch networks.
+3. **HTTPS / TLS Configuration via Vite**:
+   - Configured `@vitejs/plugin-basic-ssl` to serve the frontend over HTTPS (`https://localhost:5173/`), ensuring modern browsers grant camera and microphone access.
+4. **Full Reverse Proxy Mapping in `vite.config.js`**:
+   - `/api` $\rightarrow$ `http://localhost:8080` (Spring Boot REST)
+   - `/ws-proctor` $\rightarrow$ `http://localhost:8080` (STOMP WebSockets)
+   - `/gaze-api` $\rightarrow$ `http://localhost:5001` (Gaze Detection Server)
+   - `/voice-api` $\rightarrow$ `http://localhost:8000` (VoiceGuard REST Server)
+   - `/ws-voice` $\rightarrow$ `ws://localhost:8000/ws/monitor` (VoiceGuard Audio WebSocket)
 
 ---
 
-### 7. On-Demand Camera Feeds & Bandwidth Optimization
-- **Bandwidth & Performance Fix**:
-  - Replaced simultaneous live video streaming for every student with **on-demand monitoring**.
-  - In [`ActiveCandidates.jsx`](file:///c:/Major/frontend/src/components/dashboard/ActiveCandidates.jsx): Displays clean, responsive student roster cards with clickable rows and `📷 Show Camera` action buttons.
-  - In [`CandidateMonitorCard.jsx`](file:///c:/Major/frontend/src/components/monitoring/CandidateMonitorCard.jsx): Added an inline "Click to View Camera Feed" toggle alongside drill-down modal inspection via [`CandidateDetailModal.jsx`](file:///c:/Major/frontend/src/components/monitoring/CandidateDetailModal.jsx).
-
----
-
-### 8. Database Connection Resilience (HikariCP)
-- **Sleep/Wake & Connection Drop Resilience ([`application.properties`](file:///c:/Major/backend/src/main/resources/application.properties))**:
-  - Configured robust connection pooling parameters:
-    ```properties
-    spring.datasource.hikari.connection-timeout=20000
-    spring.datasource.hikari.maximum-pool-size=10
-    spring.datasource.hikari.max-lifetime=1800000
-    spring.datasource.hikari.idle-timeout=300000
-    spring.datasource.hikari.keepalive-time=30000
-    spring.datasource.hikari.validation-timeout=5000
-    ```
-  - Prevents stale connection drops and `PSQLException` crashes when host computers sleep, wake, or switch network interfaces.
-
----
-
-### 9. Student Portal Dual-View Workflow
-- Main portal page (`/student` in [`StudentPortal.jsx`](file:///c:/Major/frontend/src/pages/student/StudentPortal.jsx)) filtered to strictly show **only upcoming exams**.
-- All attempted, completed, or in-progress exams moved to dedicated **My Attempts** page (`/student/attempts` in [`AttemptedExams.jsx`](file:///c:/Major/frontend/src/pages/student/AttemptedExams.jsx)).
-- Interactive navigation tab bar linking between Upcoming and Attempted views with live counter badges.
-- Backend endpoint `GET /api/exams/submissions` in [`ExamController.java`](file:///c:/Major/backend/src/main/java/com/proctoring/proctoring_backend/controller/ExamController.java) loading student submission records from PostgreSQL.
-
----
-
-### 10. Dual-Camera Proctoring (Laptop + Mobile Camera)
-- **Session-Specific Mobile Pairing**:
-  - Secure QR code & pairing link generation via backend `POST /api/mobile-pairing/generate` and `MobilePairingToken` entity.
-  - Candidate scans QR on smartphone to open responsive mobile web app (`/mobile-camera?token=...`).
-  - No app installation required; runs natively in modern mobile browsers with rear-camera default and camera switch capabilities.
-- **Real-Time WebRTC P2P Video Transmission**:
-  - WebRTC signaling relayed through Spring Boot WebSocket STOMP endpoints (`/app/webrtc/{sessionId}/*` and `/topic/webrtc/{sessionId}/*`).
-  - Automatic reconnection handling, graceful degradation, and live connection telemetry.
-- **Dual-Feed Examination & Proctor Interfaces**:
-  - **Candidate Interface ([`StudentExam.jsx`](file:///c:/Major/frontend/src/pages/StudentExam.jsx))**: Shows both `Primary Camera – Laptop Webcam` and `Secondary Camera – Mobile Phone` feeds with clear connection status badges and QR code pairing.
-  - **Proctor Dashboard ([`CandidateDetailModal.jsx`](file:///c:/Major/frontend/src/components/monitoring/CandidateDetailModal.jsx))**: Invigilators can view both laptop and mobile camera feeds simultaneously in dual-camera inspection mode with disconnect alerts and session telemetry.
-
----
-
-## 📁 Project Directory Structure
+## 📁 Updated Project Directory Structure
 ```
 Major/
 ├── PROJECT_SUMMARY.md       <-- (This file: comprehensive record of system state)
@@ -188,47 +133,52 @@ Major/
 ├── backend/                 <-- Spring Boot 4.1.1 Java 25 Backend
 │   ├── src/main/java/com/proctoring/proctoring_backend/
 │   │   ├── config/          (WebConfig, DatabaseSeeder, WebSocketConfig)
-│   │   ├── controller/      (AuthController, CandidateController, ExamController, DashboardController, etc.)
+│   │   ├── controller/      (AuthController, CandidateController, ExamController, WebRtcSignalingController, MobilePairingController, etc.)
 │   │   ├── dto/             (StartSessionRequest, SessionResponse, ProctoringEventRequest, RiskSummary, etc.)
-│   │   ├── entity/          (Candidate, Exam, Question, ExamSubmission, ExamSession, ProctoringEvent, Violation, User)
-│   │   ├── repository/      (CandidateRepository, ExamRepository, ProctoringEventRepository, ViolationRepository, etc.)
+│   │   ├── entity/          (Candidate, Exam, Question, ExamSubmission, ExamSession, ProctoringEvent, Violation, MobilePairingToken, User)
+│   │   ├── repository/      (CandidateRepository, ExamRepository, ProctoringEventRepository, ViolationRepository, MobilePairingTokenRepository, etc.)
 │   │   └── service/         (ExamSessionService, ProctoringEventService, RiskScoringService)
 │   ├── src/test/java/       (NetworkInterruptionProctoringTest, RiskScoringServiceTest, ProctoringBackendApplicationTests)
 │   ├── src/main/resources/  (application.properties)
 │   ├── mvnw / mvnw.cmd      (Maven wrapper scripts)
 │   └── pom.xml
-├── frontend/                <-- React 19 + Vite 8 Web Application
+├── frontend/                <-- React 19 + Vite 8 Web Application (HTTPS)
 │   ├── src/
 │   │   ├── components/
 │   │   │   ├── auth/        (ProtectedRoute)
 │   │   │   ├── common/      (UserAvatar, RiskBadge, StatusBadge, SearchBar, EmptyState, Modal, LoadingSpinner)
 │   │   │   ├── dashboard/   (ActiveCandidates, ActiveExamsCard, RecentMalpracticesGraph, MalpracticeBreakdown, QuickActions, RecentViolations, StatCard)
-│   │   │   ├── exam/        (QuestionCard, QuestionNavigator, SecurityViolationModal, NetworkInterruptionBanner, CameraPreview, ExamTimer, SecurityStatus, SecurityActivity)
+│   │   │   ├── exam/        (QuestionCard, QuestionNavigator, SecurityViolationModal, NetworkInterruptionBanner, CameraPreview, MobileCameraPanel, VoiceMonitorPanel, ExamTimer)
 │   │   │   ├── layout/      (AppLayout, Navbar, Sidebar)
-│   │   │   └── monitoring/  (CandidateMonitorCard, CandidateDetailModal, CameraPlaceholder, MonitoringTimeline)
-│   │   ├── pages/           (Dashboard, LiveMonitoring, StudentExam, StudentPortal, AttemptedExams, Exams, Students, Reports, Settings)
-│   │   ├── services/        (api.js, auth.js, examSecurity.js, gazeAnalysis.js, studentExams.js, websocket.js)
+│   │   │   └── monitoring/  (CandidateMonitorCard, CandidateDetailModal, MobileCameraFeed, CameraPlaceholder, MonitoringTimeline)
+│   │   ├── pages/           (Dashboard, LiveMonitoring, StudentExam, MobileCameraPage, StudentPortal, AttemptedExams, Exams, Students, Reports, Settings)
+│   │   ├── services/        (api.js, auth.js, examSecurity.js, gazeAnalysis.js, voiceAnalysis.js, mobileCamera.js, mobilePeer.js, studentExams.js, websocket.js)
 │   │   └── index.css        (Global design tokens, avatar styles, layout utilities)
 │   ├── package.json
-│   └── vite.config.js
-└── gaze_detection/          <-- Real-Time Gaze Estimation & AI Microservice
-    ├── .venv/               (Isolated Python 3.11 virtual environment)
-    ├── models/
-    │   ├── face_landmarker.task             (MediaPipe Face Landmarker model)
-    │   └── l2cs_net/
-    │       └── l2cs_gaze360_resnet50.safetensors (L2CS-Net ResNet-50 Gaze360 weights)
-    ├── calibration_data/    (Saved calibration coordinates)
-    ├── server.py            (FastAPI Uvicorn API server on port 5001)
-    ├── gaze_model.py        (L2CS-Net ResNet-50 inference engine)
-    ├── landmarks.py         (MediaPipe 478 face and iris landmark detector)
-    ├── head_pose.py         (Head yaw/pitch/roll estimator via solvePnP)
-    ├── eye_crop.py          (Eye region extractor & geometric estimator)
-    ├── capture.py           (Webcam capture module)
-    ├── calibration.py       (Screen gaze calibration)
-    ├── smoothing.py         (EMA temporal smoothing)
-    ├── visualization.py     (Visual overlay engine)
-    ├── requirements.txt     (Python dependencies)
-    └── README.md            (Gaze detection architecture and guide)
+│   └── vite.config.js       (SSL + Proxy routes for /api, /ws-proctor, /gaze-api, /voice-api, /ws-voice)
+├── gaze_detection/          <-- Real-Time Gaze Estimation & AI Microservice (Port 5001)
+│   ├── .venv/               (Isolated Python 3.11 virtual environment)
+│   ├── models/
+│   │   ├── face_landmarker.task             (MediaPipe Face Landmarker model)
+│   │   └── l2cs_net/
+│   │       └── l2cs_gaze360_resnet50.safetensors (L2CS-Net ResNet-50 Gaze360 weights)
+│   ├── server.py            (FastAPI Uvicorn API server on port 5001)
+│   ├── gaze_model.py        (L2CS-Net ResNet-50 inference engine)
+│   ├── landmarks.py         (MediaPipe 478 face and iris landmark detector)
+│   ├── head_pose.py         (Head yaw/pitch/roll estimator via solvePnP)
+│   └── requirements.txt     (Python dependencies)
+└── voice detection/         <-- VoiceGuard Multi-Voice Detection Microservice (Port 8000)
+    ├── .venv/               (Python 3.11 environment with SpeechBrain & PyTorch)
+    ├── backend/
+    │   └── app/
+    │       ├── main.py      (FastAPI server exposing /enroll, /health, /ws/monitor)
+    │       ├── models.py    (Silero VAD + SpeechBrain ECAPA-TDNN embedder)
+    │       ├── enrollment.py(Voice profile feature extractor & threshold calculator)
+    │       ├── monitor.py   (Sliding window similarity evaluator)
+    │       └── sessions.py  (In-memory session store & reporting)
+    ├── pretrained_models/   (Local offline model cache for ECAPA-TDNN)
+    ├── config.yaml          (VAD, enrollment durations, and threshold parameters)
+    └── requirements.txt
 ```
 
 ---
@@ -237,5 +187,5 @@ Major/
 
 | Role | Username / ID | Password | Access Portal |
 | :--- | :--- | :--- | :--- |
-| **Student** | `STU001` (or any `STU*` ID) | `student123` | [http://localhost:5173/student-login](http://localhost:5173/student-login) |
-| **Invigilator / Admin** | `admin` | `admin123` | [http://localhost:5173/invigilator-login](http://localhost:5173/invigilator-login) |
+| **Student** | `STU001` (or any `STU*` ID) | `student123` | [https://localhost:5173/student-login](https://localhost:5173/student-login) |
+| **Invigilator / Admin** | `admin` | `admin123` | [https://localhost:5173/invigilator-login](https://localhost:5173/invigilator-login) |
