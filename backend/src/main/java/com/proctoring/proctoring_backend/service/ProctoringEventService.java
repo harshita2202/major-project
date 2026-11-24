@@ -219,9 +219,9 @@ public class ProctoringEventService {
         if ("HIGH".equalsIgnoreCase(riskLevel)) return "high";
         if (eventType == null) return "medium";
         return switch (eventType.toUpperCase()) {
-            case "MULTIPLE_VOICES", "MULTIPLE_VOICE", "VOICE_WARNING", "AUDIO_ANOMALY" -> "high";
+            case "MULTIPLE_VOICES", "MULTIPLE_VOICE", "VOICE_WARNING", "AUDIO_ANOMALY", "AUDIO_WARNING" -> "high";
             case "TAB_SWITCH", "CLIPBOARD_PASTE_ATTEMPT", "FULLSCREEN_EXIT" -> "high";
-            case "GAZE_WARNING", "GAZE", "VOICE_WARNING", "AUDIO_WARNING", "MULTIPLE_VOICES", "COPY_ATTEMPT" -> "medium";
+            case "GAZE_WARNING", "GAZE", "COPY_ATTEMPT" -> "medium";
             default -> "low";
         };
     }
@@ -229,12 +229,11 @@ public class ProctoringEventService {
     private String formatDefaultDetails(String eventType) {
         if (eventType == null) return "Proctoring event logged";
         return switch (eventType.toUpperCase()) {
-            case "MULTIPLE_VOICES", "MULTIPLE_VOICE", "VOICE_WARNING", "AUDIO_ANOMALY" -> "Multiple voices or background conversation detected";
+            case "MULTIPLE_VOICES", "MULTIPLE_VOICE", "VOICE_WARNING", "AUDIO_ANOMALY", "AUDIO_WARNING" -> "Another voice or multiple voices detected on candidate microphone";
             case "CLIPBOARD_PASTE_ATTEMPT" -> "Candidate attempted to paste content from clipboard";
             case "TAB_SWITCH" -> "Candidate switched browser tab or focus moved away from exam window";
             case "FULLSCREEN_EXIT" -> "Candidate exited required fullscreen mode";
             case "GAZE_WARNING", "GAZE" -> "Prolonged gaze deviation detected away from exam window";
-            case "VOICE_WARNING", "AUDIO_WARNING", "MULTIPLE_VOICES" -> "Another voice or unauthorized speech detected on candidate microphone";
             case "SILENT_MIC", "MIC_MUTED" -> "Candidate microphone remained silent or muted for an extended period";
             case "LONG_INACTIVITY" -> "Candidate inactive for an extended period";
             case "NETWORK_INTERRUPTION", "NETWORK_DISCONNECTION" -> "Network connection interrupted";

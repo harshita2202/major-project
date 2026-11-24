@@ -43,7 +43,7 @@ public class RiskScoringService {
             "Please keep your attention on the exam screen. Repeated suspicious behavior may result in automatic submission.";
 
     public static final String WARNING_VOICE =
-            "Another voice or unauthorized speech was detected. Please ensure you are alone and silent during the exam. Further violations may result in automatic exam submission.";
+            "Multiple voices or unauthorized speech detected. External verbal communication or assistance is strictly prohibited during the exam.";
 
     public static final String WARNING_SILENT_MIC =
             "Your microphone appears to be muted or silent. Please keep your microphone active throughout the exam.";
@@ -54,24 +54,8 @@ public class RiskScoringService {
     public static final String WARNING_NETWORK =
             "Network connection was interrupted. Please maintain a stable connection.";
 
-    public static final String WARNING_VOICE =
-            "Multiple voices detected. External verbal communication or assistance is strictly prohibited.";
-
     /**
      * Calculate point weight based on proctoring event type.
-     * LOW-RISK EVENTS:
-     * - Network Disconnection = +5
-     * - Long Inactivity = +5
-     *
-     * MEDIUM-RISK EVENTS:
-     * - Gaze Warning = +10
-     * - Keyboard Shortcut Attempt = +10
-     * - Fullscreen Exit = +15
-     *
-     * HIGHER-RISK EVENTS:
-     * - Tab Switch = +20
-     * - Copy Attempt = +25
-     * - Paste Attempt = +25
      */
     public int getEventPoints(String eventType) {
         if (eventType == null) return 10;
@@ -80,11 +64,10 @@ public class RiskScoringService {
             case "LONG_INACTIVITY", "INACTIVITY" -> 5;
             case "SILENT_MIC", "MIC_MUTED" -> 5;
             case "GAZE_WARNING", "GAZE" -> 8;
-            case "VOICE_WARNING", "AUDIO_WARNING", "MULTIPLE_VOICES", "VOICE" -> 15;
+            case "VOICE_WARNING", "AUDIO_WARNING", "MULTIPLE_VOICES", "VOICE", "MULTIPLE_VOICE", "AUDIO_ANOMALY" -> 15;
             case "SHORTCUT_ATTEMPT", "KEYBOARD_SHORTCUT", "KEYBOARD_SHORTCUT_ATTEMPT" -> 5;
             case "FULLSCREEN_EXIT" -> 10;
             case "TAB_SWITCH" -> 15;
-            case "MULTIPLE_VOICES", "MULTIPLE_VOICE", "VOICE_WARNING", "AUDIO_ANOMALY" -> 15;
             case "COPY_ATTEMPT", "COPY", "CUT_ATTEMPT", "CUT" -> 20;
             case "PASTE_ATTEMPT", "PASTE", "CLIPBOARD_PASTE_ATTEMPT" -> 20;
             default -> 10;
@@ -119,11 +102,10 @@ public class RiskScoringService {
             case "FULLSCREEN_EXIT" -> WARNING_FULLSCREEN_EXIT;
             case "SHORTCUT_ATTEMPT", "KEYBOARD_SHORTCUT", "KEYBOARD_SHORTCUT_ATTEMPT" -> WARNING_KEYBOARD_SHORTCUT;
             case "GAZE_WARNING", "GAZE" -> WARNING_GAZE;
-            case "VOICE_WARNING", "AUDIO_WARNING", "MULTIPLE_VOICES", "VOICE" -> WARNING_VOICE;
+            case "VOICE_WARNING", "AUDIO_WARNING", "MULTIPLE_VOICES", "VOICE", "MULTIPLE_VOICE", "AUDIO_ANOMALY" -> WARNING_VOICE;
             case "SILENT_MIC", "MIC_MUTED" -> WARNING_SILENT_MIC;
             case "LONG_INACTIVITY", "INACTIVITY" -> WARNING_LONG_INACTIVITY;
             case "NETWORK_INTERRUPTION", "NETWORK_DISCONNECTION", "NETWORK" -> WARNING_NETWORK;
-            case "MULTIPLE_VOICES", "MULTIPLE_VOICE", "VOICE_WARNING", "AUDIO_ANOMALY" -> WARNING_VOICE;
             default -> "Please follow examination rules. Further violations may result in automatic exam submission.";
         };
     }
