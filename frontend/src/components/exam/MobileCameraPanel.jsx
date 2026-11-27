@@ -1,5 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Smartphone, QrCode, Wifi, WifiOff, RotateCcw, AlertCircle, Copy, Check } from 'lucide-react';
+import {
+  Smartphone,
+  QrCode,
+  Wifi,
+  WifiOff,
+  RotateCcw,
+  AlertCircle,
+  Copy,
+  Check,
+  CheckCircle2,
+} from 'lucide-react';
 import QRCode from 'qrcode';
 import { subscribeToTopic } from '../../services/websocket';
 import {
@@ -9,42 +19,65 @@ import {
   getMobileConnectionStatus,
 } from '../../services/mobileCamera';
 
+// Module-level cache keyed by sessionId so transitioning from the Instructions screen
+// (mode="pair") to the Active Exam screen (mode="monitor") preserves the live stream seamlessly.
+const mobileSessionCache = new Map();
+
+function getCachedSession(sessionId) {
+  if (!sessionId) return null;
+  return mobileSessionCache.get(sessionId) || null;
+}
+
+function updateCachedSession(sessionId, patch) {
+  if (!sessionId) return;
+  const prev = mobileSessionCache.get(sessionId) || {};
+  mobileSessionCache.set(sessionId, { ...prev, ...patch });
+}
+
 /**
  * MobileCameraPanel.jsx
  * ProctorTrack™ — Dual-Camera Proctoring
  *
- * Shows QR code pairing UI and mobile camera video feed on the student exam page.
+ * Supports two modes:
+ * - mode="pair": Pre-exam QR code pairing & live preview card on the Instructions screen.
+ * - mode="monitor": Live secondary camera video feed in the exam sidebar (no QR code).
  *
  * Props:
- *   sessionId      string  — Current exam session ID
+ *   mode           'pair' | 'monitor' (default: 'monitor')
+ *   sessionId      string  — Shared session/candidate ID
  *   examId         string
  *   candidateId    string
  *   candidateName  string
- *   isActive       bool    — Only connect when exam is active
+ *   isActive       bool    — Whether connection listeners should be active
  */
 export default function MobileCameraPanel({
+  mode = 'monitor',
   sessionId,
   examId,
   candidateId,
   candidateName,
   isActive = false,
 }) {
-  const [pairingData, setPairingData] = useState(null); // { token, pairingUrl }
-  const [mobileConnected, setMobileConnected] = useState(false);
-  const [webrtcState, setWebrtcState] = useState('idle'); // 'idle' | 'connecting' | 'connected' | 'disconnected' | 'failed'
+  const cached = getCachedSession(sessionId);
+
+  const [pairingData, setPairingData] = useState(() => cached?.pairingData || null);
+  const [mobileConnected, setMobileConnected] = useState(() => cached?.mobileConnected || false);
+  const [webrtcState, setWebrtcState] = useState(() =>
+    cached?.mobileConnected ? 'connected' : 'idle'
+  ); // 'idle' | 'connecting' | 'connected' | 'disconnected' | 'failed'
   const [remoteStream, setRemoteStream] = useState(null);
   const [remotePlaying, setRemotePlaying] = useState(false);
-  const [fallbackFrame, setFallbackFrame] = useState(null);
+  const [fallbackFrame, setFallbackFrame] = useState(() => cached?.fallbackFrame || null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState(null);
-  const [qrDataUrl, setQrDataUrl] = useState(null);
+  const [qrDataUrl, setQrDataUrl] = useState(() => cached?.qrDataUrl || null);
   const [copied, setCopied] = useState(false);
 
   const videoRef = useRef(null);
   const webrtcRef = useRef(null);
   const statusUnsubRef = useRef(null);
   const reconnectTimerRef = useRef(null);
-  const fallbackFrameRef = useRef(null);
+  const fallbackFrameRef = useRef(fallbackFrame);
 
   useEffect(() => {
     fallbackFrameRef.current = fallbackFrame;
@@ -65,7 +98,7 @@ export default function MobileCameraPanel({
   }, []);
 
   const startPairing = useCallback(async () => {
-    if (!sessionId || !isActive) return;
+    if (!sessionId || !isActive || mode !== 'pair') return;
     setIsGenerating(true);
     setError(null);
     try {
@@ -73,20 +106,21 @@ export default function MobileCameraPanel({
       setPairingData(data);
       const qrUrl = await generateQRDataUrl(data.pairingUrl);
       setQrDataUrl(qrUrl);
+      updateCachedSession(sessionId, { pairingData: data, qrDataUrl: qrUrl });
     } catch (err) {
       setError('Failed to generate QR code. Please retry.');
       console.warn('[MobileCameraPanel] Pairing error:', err);
     } finally {
       setIsGenerating(false);
     }
-  }, [sessionId, examId, candidateId, candidateName, isActive, generateQRDataUrl]);
+  }, [sessionId, examId, candidateId, candidateName, isActive, mode, generateQRDataUrl]);
 
-  // Auto-start pairing when exam becomes active
+  // Auto-start QR pairing only in pre-exam "pair" mode on the Instructions screen
   useEffect(() => {
-    if (isActive && sessionId && !pairingData) {
+    if (mode === 'pair' && isActive && sessionId && !pairingData) {
       startPairing();
     }
-  }, [isActive, sessionId, pairingData, startPairing]);
+  }, [mode, isActive, sessionId, pairingData, startPairing]);
 
   // Check initial connection and subscribe to mobile status from WebSocket
   useEffect(() => {
@@ -96,13 +130,16 @@ export default function MobileCameraPanel({
       .then((res) => {
         if (res && res.mobileConnected) {
           setMobileConnected(true);
+          updateCachedSession(sessionId, { mobileConnected: true });
         }
       })
       .catch(() => {});
 
     const unsub = subscribeToMobileCameraStatus(sessionId, (status) => {
-      setMobileConnected(status.mobileConnected);
-      if (status.mobileConnected) {
+      const connected = Boolean(status.mobileConnected);
+      setMobileConnected(connected);
+      updateCachedSession(sessionId, { mobileConnected: connected });
+      if (connected) {
         setWebrtcState((prev) => (prev === 'connected' ? 'connected' : 'connecting'));
         if (webrtcRef.current) {
           webrtcRef.current.renegotiate().catch(() => {});
@@ -112,7 +149,9 @@ export default function MobileCameraPanel({
       }
     });
     statusUnsubRef.current = unsub;
-    return () => { if (statusUnsubRef.current) statusUnsubRef.current(); };
+    return () => {
+      if (statusUnsubRef.current) statusUnsubRef.current();
+    };
   }, [sessionId, isActive]);
 
   // Subscribe to live frame stream (guaranteed fallback if WebRTC STUN is unavailable)
@@ -123,16 +162,21 @@ export default function MobileCameraPanel({
         setFallbackFrame(data.image);
         setMobileConnected(true);
         setWebrtcState('connected');
+        updateCachedSession(sessionId, {
+          fallbackFrame: data.image,
+          mobileConnected: true,
+        });
       }
     });
-    return () => { if (unsub) unsub(); };
+    return () => {
+      if (unsub) unsub();
+    };
   }, [sessionId, isActive]);
 
   // Start WebRTC when we have a session and mobile becomes connected
   useEffect(() => {
     if (!sessionId || !mobileConnected || !isActive) return;
 
-    // Cleanup any previous connection
     if (webrtcRef.current) {
       webrtcRef.current.destroy();
       webrtcRef.current = null;
@@ -222,6 +266,296 @@ export default function MobileCameraPanel({
     ? 'PAIRING READY'
     : 'STANDBY';
 
+  // ─────────────────────────────────────────────────────────────────────────────
+  // RENDER 1: Pre-Exam QR Pairing Mode (on Instructions screen before exam)
+  // ─────────────────────────────────────────────────────────────────────────────
+  if (mode === 'pair') {
+    return (
+      <div
+        style={{
+          marginTop: '16px',
+          backgroundColor: '#f8fafc',
+          border: isLive ? '1.5px solid #10b981' : '1px solid var(--border-subtle)',
+          borderRadius: '12px',
+          padding: '16px 18px',
+        }}
+      >
+        {/* Header Row */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '12px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div
+              style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: '8px',
+                backgroundColor: isLive ? '#d1fae5' : '#e0f2fe',
+                color: isLive ? '#047857' : '#0369a1',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {isLive ? <CheckCircle2 size={16} /> : <Smartphone size={16} />}
+            </div>
+            <div>
+              <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--pt-navy-900)' }}>
+                Secondary Camera Setup (Mobile Phone QR Pairing)
+              </div>
+              <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                {isLive
+                  ? 'Secondary mobile camera paired and streaming — will stay visible during the exam'
+                  : 'Scan the QR code below with your smartphone before starting the exam'}
+              </div>
+            </div>
+          </div>
+
+          <span
+            style={{
+              fontSize: '10.5px',
+              fontWeight: 700,
+              padding: '3px 9px',
+              borderRadius: '9999px',
+              backgroundColor: isLive ? '#d1fae5' : '#e0f2fe',
+              color: isLive ? '#065f46' : '#0369a1',
+            }}
+          >
+            {isLive ? '✓ Mobile Connected' : statusLabel}
+          </span>
+        </div>
+
+        {/* Body: QR Code on left + Live Preview / Instructions on right */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: isLive ? '1fr' : 'auto 1fr',
+            gap: '16px',
+            alignItems: 'center',
+            backgroundColor: '#0f2740',
+            borderRadius: '10px',
+            padding: '14px',
+            color: '#e2e8f0',
+          }}
+        >
+          {/* QR Code Box (shown before mobile camera is live) */}
+          {!isLive && (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '8px',
+              }}
+            >
+              {error ? (
+                <div style={{ textAlign: 'center', padding: '12px' }}>
+                  <AlertCircle size={24} color="#f87171" style={{ marginBottom: '6px' }} />
+                  <div style={{ fontSize: '11px', color: '#f87171' }}>{error}</div>
+                  <button
+                    type="button"
+                    onClick={startPairing}
+                    style={{
+                      marginTop: '8px',
+                      fontSize: '11px',
+                      color: '#26c6da',
+                      background: 'rgba(255,255,255,0.1)',
+                      border: '1px solid rgba(38,198,218,0.3)',
+                      borderRadius: '6px',
+                      padding: '4px 12px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : qrDataUrl ? (
+                <div
+                  style={{
+                    backgroundColor: '#ffffff',
+                    borderRadius: '10px',
+                    padding: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+                  }}
+                >
+                  <img
+                    src={qrDataUrl}
+                    alt="Mobile camera pairing QR code"
+                    style={{ width: '115px', height: '115px', display: 'block' }}
+                  />
+                </div>
+              ) : (
+                <div
+                  style={{
+                    width: '131px',
+                    height: '131px',
+                    borderRadius: '10px',
+                    backgroundColor: 'rgba(255,255,255,0.06)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <Smartphone size={26} color="rgba(38,198,218,0.6)" />
+                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+                    {isGenerating ? 'Generating QR...' : 'Loading QR...'}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Instructions or Live Mobile Preview */}
+          {!isLive ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <QrCode size={15} color="#26c6da" />
+                Connect Your Secondary Camera Now
+              </div>
+              <ol
+                style={{
+                  margin: 0,
+                  paddingLeft: '18px',
+                  fontSize: '12px',
+                  color: 'rgba(226,232,240,0.85)',
+                  lineHeight: 1.55,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '3px',
+                }}
+              >
+                <li>Ensure your smartphone is on the same Wi-Fi or Hotspot network.</li>
+                <li>Open your phone camera or QR scanner and scan this QR code.</li>
+                <li>Grant camera permission on your phone to start the live secondary feed.</li>
+              </ol>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
+                {pairingData?.pairingUrl && (
+                  <button
+                    type="button"
+                    onClick={handleCopyLink}
+                    style={{
+                      fontSize: '11px',
+                      color: copied ? '#34d399' : '#26c6da',
+                      backgroundColor: 'rgba(38,198,218,0.12)',
+                      border: '1px solid rgba(38,198,218,0.3)',
+                      borderRadius: '6px',
+                      padding: '5px 10px',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    {copied ? <Check size={12} /> : <Copy size={12} />}
+                    {copied ? 'Pairing Link Copied!' : 'Copy Pairing Link'}
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={startPairing}
+                  disabled={isGenerating}
+                  style={{
+                    fontSize: '11px',
+                    color: '#cbd5e1',
+                    backgroundColor: 'rgba(255,255,255,0.08)',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    borderRadius: '6px',
+                    padding: '5px 10px',
+                    cursor: isGenerating ? 'wait' : 'pointer',
+                    fontWeight: 600,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                >
+                  <RotateCcw size={12} />
+                  {isGenerating ? 'Refreshing...' : 'Refresh QR'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Live Mobile Stream Preview once connected on Instructions screen */
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div
+                style={{
+                  position: 'relative',
+                  width: '180px',
+                  aspectRatio: '16/9',
+                  backgroundColor: '#0a1c30',
+                  borderRadius: '8px',
+                  overflow: 'hidden',
+                  border: '1.5px solid #22c55e',
+                  flexShrink: 0,
+                }}
+              >
+                {fallbackFrame && (
+                  <img
+                    src={fallbackFrame}
+                    alt="Mobile Secondary Feed Preview"
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      position: 'absolute',
+                      inset: 0,
+                      zIndex: 2,
+                    }}
+                  />
+                )}
+                <video
+                  ref={videoRef}
+                  playsInline
+                  autoPlay
+                  muted
+                  disablePictureInPicture
+                  onPlaying={() => setRemotePlaying(true)}
+                  onLoadedMetadata={(e) => {
+                    e.target.play().catch(() => {});
+                  }}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    pointerEvents: 'none',
+                    position: 'absolute',
+                    inset: 0,
+                    zIndex: 3,
+                    display: remoteStream && remotePlaying ? 'block' : 'none',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: '#4ade80', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Wifi size={14} /> Secondary Mobile Camera Active
+                </div>
+                <div style={{ fontSize: '11.5px', color: 'rgba(226,232,240,0.85)', lineHeight: 1.5 }}>
+                  Your mobile phone camera is paired and streaming. Keep your phone positioned to show your workspace throughout the examination.
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // RENDER 2: Active Exam Sidebar Monitor Mode (no QR code on exam screen)
+  // ─────────────────────────────────────────────────────────────────────────────
   return (
     <div
       style={{
@@ -270,34 +604,9 @@ export default function MobileCameraPanel({
             Mobile Phone
           </span>
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {pairingData && !isLive && (
-            <button
-              type="button"
-              onClick={startPairing}
-              disabled={isGenerating}
-              title="Regenerate QR Code"
-              style={{
-                fontSize: '10px',
-                color: 'rgba(255,255,255,0.5)',
-                background: 'none',
-                border: 'none',
-                cursor: isGenerating ? 'wait' : 'pointer',
-                fontWeight: 600,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '3px',
-              }}
-            >
-              <RotateCcw size={11} />
-              {isGenerating ? 'Generating...' : 'Refresh QR'}
-            </button>
-          )}
-        </div>
       </div>
 
-      {/* Main content area */}
+      {/* Main content area — Live Secondary Camera Feed (No QR Code here) */}
       <div
         style={{
           position: 'relative',
@@ -309,7 +618,7 @@ export default function MobileCameraPanel({
           overflow: 'hidden',
         }}
       >
-        {/* Live fallback frame image from WebSocket (always displayed whenever frames arrive) */}
+        {/* Live fallback frame image from WebSocket */}
         {fallbackFrame && (
           <img
             src={fallbackFrame}
@@ -325,7 +634,7 @@ export default function MobileCameraPanel({
           />
         )}
 
-        {/* Live mobile video from WebRTC (only overlays when actively playing decoded frames) */}
+        {/* Live mobile video from WebRTC */}
         <video
           ref={videoRef}
           playsInline
@@ -349,79 +658,30 @@ export default function MobileCameraPanel({
           }}
         />
 
-        {/* QR Code pairing UI (shown when not connected and no frames yet) */}
+        {/* Standby placeholder if mobile camera was not connected before exam */}
         {!mobileConnected && !fallbackFrame && (
           <div
             style={{
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              gap: '8px',
-              padding: '14px',
+              gap: '6px',
+              padding: '16px',
+              textAlign: 'center',
               zIndex: 2,
             }}
           >
-            {error ? (
-              <div style={{ textAlign: 'center' }}>
-                <AlertCircle size={24} color="#f87171" style={{ marginBottom: '6px' }} />
-                <div style={{ fontSize: '11px', color: '#f87171' }}>{error}</div>
-                <button
-                  type="button"
-                  onClick={startPairing}
-                  style={{
-                    marginTop: '8px',
-                    fontSize: '11px',
-                    color: '#26c6da',
-                    background: 'rgba(255,255,255,0.1)',
-                    border: '1px solid rgba(38,198,218,0.3)',
-                    borderRadius: '6px',
-                    padding: '4px 12px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Retry
-                </button>
-              </div>
-            ) : qrDataUrl ? (
-              <>
-                <div
-                  style={{
-                    backgroundColor: '#ffffff',
-                    borderRadius: '10px',
-                    padding: '6px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <img
-                    src={qrDataUrl}
-                    alt="Mobile camera pairing QR code"
-                    style={{ width: '95px', height: '95px' }}
-                  />
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '11px', color: '#e2e8f0', fontWeight: 700, marginBottom: '2px' }}>
-                    <QrCode size={11} style={{ marginRight: '4px', verticalAlign: '-1px' }} />
-                    Scan with your phone
-                  </div>
-                  <div style={{ fontSize: '9px', color: 'rgba(142,174,201,0.8)', maxWidth: '200px', lineHeight: 1.3 }}>
-                    Connect phone to same Wi-Fi / Hotspot
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div style={{ textAlign: 'center' }}>
-                <Smartphone size={28} color="rgba(38,198,218,0.5)" style={{ marginBottom: '6px' }} />
-                <div style={{ fontSize: '12px', color: '#e2e8f0', fontWeight: 600 }}>
-                  {isGenerating ? 'Generating QR Code...' : 'Secondary Camera'}
-                </div>
-              </div>
-            )}
+            <Smartphone size={26} color="rgba(148,163,184,0.45)" />
+            <div style={{ fontSize: '11.5px', color: '#cbd5e1', fontWeight: 600 }}>
+              Secondary Camera Standby
+            </div>
+            <div style={{ fontSize: '10px', color: 'rgba(142,174,201,0.7)', maxWidth: '190px', lineHeight: 1.35 }}>
+              Waiting for paired mobile camera stream
+            </div>
           </div>
         )}
 
-        {/* Connecting spinner overlay (only if connecting and no frames yet) */}
+        {/* Connecting spinner overlay */}
         {mobileConnected && webrtcState === 'connecting' && !fallbackFrame && (
           <div
             style={{
@@ -495,26 +755,9 @@ export default function MobileCameraPanel({
               <Wifi size={11} /> Stream Active
             </span>
           ) : (
-            pairingData?.pairingUrl && (
-              <button
-                type="button"
-                onClick={handleCopyLink}
-                style={{
-                  fontSize: '10px',
-                  color: copied ? '#34d399' : '#26c6da',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '3px',
-                }}
-              >
-                {copied ? <Check size={10} /> : <Copy size={10} />}
-                {copied ? 'Copied!' : 'Copy Link'}
-              </button>
-            )
+            <span style={{ fontSize: '10.5px', color: '#94a3b8', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <WifiOff size={11} /> Offline
+            </span>
           )}
         </div>
       </div>

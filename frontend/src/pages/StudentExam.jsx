@@ -1172,6 +1172,16 @@ export default function StudentExam() {
               onEnrolled={(enrolled) => setVoiceSession(enrolled)}
             />
 
+            {/* Secondary Camera QR Pairing (connected before starting the exam) */}
+            <MobileCameraPanel
+              mode="pair"
+              sessionId={examMeta.candidateId || currentUser?.userId || 'STU001'}
+              examId={examId}
+              candidateId={examMeta.candidateId || currentUser?.userId || 'STU001'}
+              candidateName={examMeta.candidateName || currentUser?.name || 'Candidate'}
+              isActive={phase === PHASE.INSTRUCTIONS}
+            />
+
             {/* ProctorTrack note */}
             <div
               style={{
@@ -1829,7 +1839,8 @@ export default function StudentExam() {
               onVoiceEvent={handleVoiceEvent}
             />
             <MobileCameraPanel
-              sessionId={sessionId || (currentUser?.userId ? ('session-' + examId + '-' + currentUser.userId) : null)}
+              mode="monitor"
+              sessionId={examMeta.candidateId || currentUser?.userId || 'STU001'}
               examId={examId}
               candidateId={examMeta.candidateId || currentUser?.userId || 'STU001'}
               candidateName={examMeta.candidateName || currentUser?.name || 'Candidate'}
